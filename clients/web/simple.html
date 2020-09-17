@@ -1,0 +1,63 @@
+<html>
+ <head>
+ </head>
+ <body>
+  <script src="https://www.puck-js.com/puck.js"></script>
+  <button id="connectButton">Connect!</button>
+  
+  <svg id="dial" viewBox="-100 -100 200 200"  width="100" height="100">
+   <line id="line" x1="0" y1="0" x2="90" y2="0" style="stroke:rgb(255,0,0);stroke-width:2" />
+  </svg>
+  <p>Counter: <span id="counter"/></p>
+ 
+  <script>        
+   var counter=0;
+    var xhttp = new XMLHttpRequest();
+    function onLine(v) {
+      if(isNaN(v)) return;
+      console.log("Received: "+JSON.stringify(v));
+      counter = v;
+      var r = 90;
+      var theta = counter * (2*3.14159 / 1024);
+      var x = r * Math.cos(theta);
+      var y = r * Math.sin(theta);
+      document.getElementById("line").setAttribute("x2",x);
+      document.getElementById("line").setAttribute("y2",y);    
+      document.getElementById("counter").innerHTML=counter;    
+    }
+   
+   var connection;
+   var cbutton = document.getElementById('connectButton');
+    cbutton.addEventListener("click", function() {
+      if (connection) {
+        connection.close();
+        connection = undefined;
+       return;
+      }
+      Puck.connect(function(c) {
+        if (!c) {
+          alert("Couldn't connect!");
+          return;
+        }
+        connection = c;
+        // Handle the data we get back, and call 'onLine'
+        // whenever we get a line
+        var buf = "";
+        connection.on("data", function(d) {
+          buf += d;
+          var i = buf.indexOf("\n");
+          while (i>=0) {
+            onLine(buf.substr(0,i));
+            buf = buf.substr(i+1);
+            i = buf.indexOf("\n");
+          }
+        });
+       
+        // First, reset Puck.js
+       connection.write("start();\n");
+
+      }); // Puck.connect
+    }); // button eventlistner
+  </script>
+ </body>
+</html>
