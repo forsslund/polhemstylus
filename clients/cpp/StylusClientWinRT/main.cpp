@@ -1,11 +1,19 @@
 ﻿#include "pch.h"
-
+#include "BLEdeviceFinder.h"
 using namespace winrt;
 using namespace Windows::Foundation;
+
+BLEdeviceFinder* BLEdeviceFinder::instance = 0;
 
 int main()
 {
     init_apartment();
-    Uri uri(L"http://aka.ms/cppwinrt");
-    printf("Hello, %ls!\n", uri.AbsoluteUri().c_str());
+
+    BLEdeviceFinder* pBleFinder = pBleFinder->getInstance();
+    printf("Enumerate BLE devices.\n");
+    pBleFinder->Enumerate();
+    pBleFinder->ListDevices();
+    
+    
 }
+
