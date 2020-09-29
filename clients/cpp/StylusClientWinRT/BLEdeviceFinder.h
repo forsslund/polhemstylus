@@ -14,10 +14,11 @@ class BLEdeviceFinder
 	BLEdeviceFinder() { instance = NULL; } // Private constructor so that no objects can be created.
 	static BLEdeviceFinder* instance;
 
-
+	
 	vector<Windows::Devices::Enumeration::DeviceInformation> devices;
 	bool enumerationComplete = false;
 public:
+	bool  verbose = false;
 	static BLEdeviceFinder* getInstance();
 	static fire_and_forget DeviceWatcher_Added(Windows::Devices::Enumeration::DeviceWatcher sender, Windows::Devices::Enumeration::DeviceInformation deviceInfo);
 	static fire_and_forget DeviceWatcher_Updated(Windows::Devices::Enumeration::DeviceWatcher sender, Windows::Devices::Enumeration::DeviceInformationUpdate deviceInfoUpdate);
