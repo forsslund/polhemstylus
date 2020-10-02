@@ -11,9 +11,19 @@ BLEdeviceFinder* BLEdeviceFinder::getInstance()
 
 fire_and_forget BLEdeviceFinder::DeviceWatcher_Added(Windows::Devices::Enumeration::DeviceWatcher sender, Windows::Devices::Enumeration::DeviceInformation deviceInfo)
 {	
-	wcout << "DeviceWatcher_Added\t" << (std::wstring_view) deviceInfo.Id()
-		<< " " << (std::wstring_view) deviceInfo.Name() << "\n";
-	getInstance()->devices.push_back(deviceInfo);
+	// Ignore if no name
+	if (!deviceInfo.Name().empty())
+	{
+		// Ignore if already in list
+		for (auto d : getInstance()->devices) {
+			if (d.Id() == deviceInfo.Id()) {
+				return winrt::fire_and_forget();
+			}
+		}
+		getInstance()->devices.push_back(deviceInfo);
+		wcout << "[" << getInstance()->devices.size() << "] " << (std::wstring_view) deviceInfo.Name()
+			   << " " << (std::wstring_view) deviceInfo.Id()  << endl;
+	}
 	return winrt::fire_and_forget();
 }
 
@@ -24,9 +34,7 @@ fire_and_forget BLEdeviceFinder::DeviceWatcher_Updated(Windows::Devices::Enumera
 	}
 	for (const auto& devInfo : getInstance()->devices) {
 		if (devInfo.Id() == deviceInfoUpdate.Id()) {
-			if (devInfo.Name().empty()) {
-				devInfo.Update(deviceInfoUpdate);
-			}
+			devInfo.Update(deviceInfoUpdate);
 			break;
 		}
 	}
@@ -38,10 +46,10 @@ fire_and_forget BLEdeviceFinder::DeviceWatcher_Removed(Windows::Devices::Enumera
 	if (getInstance()->verbose) {
 		wcout << "DeviceWatcher_Removed\t" << (std::wstring_view) deviceInfoUpdate.Id();
 	}
-	for (auto iter = getInstance()->devices.begin(); iter != getInstance()->devices.end(); iter++) {
-		if (iter->Id() == deviceInfoUpdate.Id()) {			
-			getInstance()->devices.erase(iter);
-			return winrt::fire_and_forget();
+	for(size_t i=0;i< getInstance()->devices.size(); i++) {
+		if (getInstance()->devices[i].Id() == deviceInfoUpdate.Id()) {
+			wcout << "["<<i+1<<"] No longer valid\t" << (std::wstring_view) deviceInfoUpdate.Id()<<endl;
+			break;
 		}
 	}
 	return winrt::fire_and_forget();
@@ -60,7 +68,7 @@ fire_and_forget BLEdeviceFinder::DeviceWatcher_Stopped(Windows::Devices::Enumera
 	return winrt::fire_and_forget();
 }
 
-void BLEdeviceFinder::Enumerate() {
+size_t BLEdeviceFinder::Enumerate() {
 
 	// BT_Code: Scan for paired and non-paired in a single query.
 	hstring aqsAllBluetoothLEDevices = L"(System.Devices.Aep.ProtocolId:=\"{bb7bb05e-5972-42b5-94fc-76eaa7084d49}\")";
@@ -87,24 +95,20 @@ void BLEdeviceFinder::Enumerate() {
 	//
 	cout << "Starting watcher...";
 	deviceWatcher.Start();
-	cout << " started.\nEnumerating...\n\n";
-	while (!enumerationComplete);
+	cout << " started.\nEnumerating... select device number, or 0 to quit\n\n";
+	
+	size_t i = 1;
+	cin >> i;
+	deviceWatcher.Stop();
 
-	//
-	// Stop watcher
-	// Accordign to some online examples, unregister the callbacks before stopping might mean they cant be called after we have stoped, could avoid async problems
-	// if callbacks have deps according to some example. Seems ugly imho thought.
-	//
 	deviceWatcher.Added(deviceWatcherAddedToken);
 	deviceWatcher.Updated(deviceWatcherUpdatedToken);
 	deviceWatcher.Removed(deviceWatcherRemovedToken);
 	deviceWatcher.EnumerationCompleted(deviceWatcherEnumerationCompletedToken);
 	deviceWatcher.Stopped(deviceWatcherStoppedToken);
 
-	cout << "\n\n...enumeration stopped.\n";
-	deviceWatcher.Stop();
-	_sleep(250);	// Just to see if we do get latecommers (we do, if we dont unregister before stop). Evidently, we do anyway, async protection needs to be in callbacks.
-	cout << "\n\nThese " << devices.size() << " devices were found:" << endl << endl;
+	//_sleep(250);	// Just to see if we do get latecommers (we do, if we dont unregister before stop). Evidently, we do anyway, async protection needs to be in callbacks.
+	return i;
 }
 
 void BLEdeviceFinder::ListDevices()
