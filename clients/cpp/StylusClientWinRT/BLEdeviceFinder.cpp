@@ -68,8 +68,8 @@ fire_and_forget BLEdeviceFinder::DeviceWatcher_Stopped(Windows::Devices::Enumera
 	return winrt::fire_and_forget();
 }
 
-size_t BLEdeviceFinder::Enumerate() {
-
+hstring BLEdeviceFinder::PromptUserForDevice()
+{
 	// BT_Code: Scan for paired and non-paired in a single query.
 	hstring aqsAllBluetoothLEDevices = L"(System.Devices.Aep.ProtocolId:=\"{bb7bb05e-5972-42b5-94fc-76eaa7084d49}\")";
 	auto requestedProperties = single_threaded_vector<hstring>({ L"System.Devices.Aep.DeviceAddress", L"System.Devices.Aep.IsConnected", L"System.Devices.Aep.Bluetooth.Le.IsConnectable" });
@@ -82,9 +82,9 @@ size_t BLEdeviceFinder::Enumerate() {
 
 	// Register event handlers before starting the watcher. Ola might want to make the referenced callbacks into weak references https://docs.microsoft.com/en-us/windows/uwp/cpp-and-winrt-apis/weak-references.
 	// Added, Updated and Removed are required to get all nearby devices
-	event_token deviceWatcherAddedToken   = deviceWatcher.Added(   DeviceWatcher_Added);
-	event_token deviceWatcherUpdatedToken = deviceWatcher.Updated( DeviceWatcher_Updated);
-	event_token deviceWatcherRemovedToken = deviceWatcher.Removed( DeviceWatcher_Removed);
+	event_token deviceWatcherAddedToken = deviceWatcher.Added(DeviceWatcher_Added);
+	event_token deviceWatcherUpdatedToken = deviceWatcher.Updated(DeviceWatcher_Updated);
+	event_token deviceWatcherRemovedToken = deviceWatcher.Removed(DeviceWatcher_Removed);
 
 	// EnumerationCompleted and Stopped are optional to implement.
 	event_token deviceWatcherEnumerationCompletedToken = deviceWatcher.EnumerationCompleted(&BLEdeviceFinder::DeviceWatcher_EnumerationCompleted);
@@ -96,19 +96,24 @@ size_t BLEdeviceFinder::Enumerate() {
 	cout << "Starting watcher...";
 	deviceWatcher.Start();
 	cout << " started.\nEnumerating... select device number, or 0 to quit\n\n";
-	
-	size_t i = 1;
-	cin >> i;
-	deviceWatcher.Stop();
 
+	char userInput[3];
+	userInput[0] = '\0';	
+	size_t i = 1;
+	cin.getline(userInput, 2);
+	i = atoi(userInput);
+
+	deviceWatcher.Stop();
 	deviceWatcher.Added(deviceWatcherAddedToken);
 	deviceWatcher.Updated(deviceWatcherUpdatedToken);
 	deviceWatcher.Removed(deviceWatcherRemovedToken);
 	deviceWatcher.EnumerationCompleted(deviceWatcherEnumerationCompletedToken);
 	deviceWatcher.Stopped(deviceWatcherStoppedToken);
 
-	//_sleep(250);	// Just to see if we do get latecommers (we do, if we dont unregister before stop). Evidently, we do anyway, async protection needs to be in callbacks.
-	return i;
+	if (0 < i && i <= devices.size()) {
+		return devices.at(i - 1).Id();
+	}
+	return L"";
 }
 
 void BLEdeviceFinder::ListDevices()

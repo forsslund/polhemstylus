@@ -25,7 +25,7 @@ public:
 	static fire_and_forget DeviceWatcher_Removed(Windows::Devices::Enumeration::DeviceWatcher sender, Windows::Devices::Enumeration::DeviceInformationUpdate deviceInfoUpdate);
 	static fire_and_forget DeviceWatcher_EnumerationCompleted(Windows::Devices::Enumeration::DeviceWatcher sender, Windows::Foundation::IInspectable const&);
 	static fire_and_forget DeviceWatcher_Stopped(Windows::Devices::Enumeration::DeviceWatcher sender, Windows::Foundation::IInspectable const&);
-	size_t Enumerate();
+	hstring PromptUserForDevice();
 	void ListDevices();
 	vector<Windows::Devices::Enumeration::DeviceInformation> GetDevices();
 };
