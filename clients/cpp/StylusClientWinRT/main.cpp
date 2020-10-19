@@ -15,12 +15,33 @@ using namespace Windows::Devices::Enumeration;
 #include "helpers.h"
 using namespace helpers;
 
+struct StylusData {
+	bool button;
+	uint16_t rotation;
+};
+
+fire_and_forget myHandler(GattCharacteristic c, GattValueChangedEventArgs const& v) {	
+	wcout << "Got: " << v.CharacteristicValue().Length() << " bytes: "<< std::hex;
+	
+	for (size_t i = 0; i < v.CharacteristicValue().Length(); i++) {
+		wcout << v.CharacteristicValue().data()[i] << " ";
+	}
+
+	StylusData s = {0};
+	s.button = (0x80 & v.CharacteristicValue().data()[0]) != 0;
+	s.rotation = (0x03 & v.CharacteristicValue().data()[0]) * 256 + v.CharacteristicValue().data()[1];
+	wcout << "\nRotation: "<< std::dec << s.rotation << (s.button ? " Button down" : " Button up") <<  "\n\n";
+	return winrt::fire_and_forget();
+}
+
+constexpr guid ourServiceUUID			= { 0x3e440001, 0xf5bb, 0x357d, { 0x71, 0x9d, 0x17, 0x92, 0x72, 0xe4, 0xd4, 0xd9 } };
+constexpr guid ourCharacteristicsUUID	= { 0x3e440002, 0xf5bb, 0x357d, { 0x71, 0x9d, 0x17, 0x92, 0x72, 0xe4, 0xd4, 0xd9 } };
+
 int main()
 {
     init_apartment();
 
-   // BLEdeviceFinder* pBleFinder = pBleFinder->getInstance();
-	BLEdeviceFinder* pBleFinder = BLEdeviceFinder::getInstance();
+ 	BLEdeviceFinder* pBleFinder = BLEdeviceFinder::getInstance();
     size_t i = pBleFinder->Enumerate();
 	wcout << endl;
 	Windows::Devices::Bluetooth::BluetoothLEDevice bluetoothLeDevice{ nullptr };
@@ -44,18 +65,17 @@ int main()
 			wcout << "Connection status:" << (bleDev.ConnectionStatus() == BluetoothConnectionStatus::Connected ? "Connected" : "Not Connected") << endl;
 			wcout << "BluetoothAddress: " << std::hex << bleDev.BluetoothAddress() << endl;
 			wcout << "DeviceAccessInformation: " << (uint16_t)bleDev.DeviceAccessInformation().CurrentStatus() << endl;
-			
-			// Get services of the device
-			auto gattServices{ bleDev.GetGattServicesAsync(BluetoothCacheMode::Uncached).get() };
 
-			
 			char userInput[3];
 			userInput[0] = '\0';
-			while( userInput[0] != 'q' && userInput[0] != 'Q')  {	
+			while (userInput[0] != 'q' && userInput[0] != 'Q' && userInput[0] != 'c') {
+				// Get services of the device
+				auto gattServices{ bleDev.GetGattServicesAsync(BluetoothCacheMode::Uncached).get() };
+
 				wcout << "\n\n===== Exploring device =====" << endl;
 				GattCommunicationStatus gattCommunicationStatus = gattServices.Status();
 				if (gattCommunicationStatus == GattCommunicationStatus::Success) {
-					for (GattDeviceService service : gattServices.Services()) {
+					for (GattDeviceService service : gattServices.Services()) {						
 						wcout << "\nService uuid " << std::hex << service.Uuid().Data1 << "-" << service.Uuid().Data2 << "-" << service.Uuid().Data3 << "-"
 							<< (uint8_t)service.Uuid().Data4[0] << " "
 							<< (uint8_t)service.Uuid().Data4[1] << " "
@@ -66,7 +86,8 @@ int main()
 							<< (uint8_t)service.Uuid().Data4[6] << " "
 							<< (uint8_t)service.Uuid().Data4[7] << " ";
 						wcout << GetServiceName(service).c_str() << endl;
-						i = 0;
+						
+						i = 0;												
 						for (GattCharacteristic c : service.GetAllCharacteristics()) {
 							wcout << "  GattCharacteristic " << i++ << ":\t";
 							wcout << GetCharacteristicName(c).c_str() << endl;
@@ -93,7 +114,7 @@ int main()
 								}
 							}
 							wcout << endl;
-						}					
+						}
 					}
 				}
 				else {
@@ -103,23 +124,58 @@ int main()
 					case GattCommunicationStatus::Unreachable: wcout << "No communication can be performed with the device, at this time." << endl; break;
 					default: wcout << "gattCommunicationStatus=" << (int)gattCommunicationStatus << endl;
 					}
-				}								
-				wcout << endl << "Enter to read again, Q to quit:";
+				}
+				wcout << endl << "Enter to read again, C continue to notifications from our characteristic, Q to quit:";
 				cin.getline(userInput, 2);
-				_sleep(250);
-			} 
-
-			// In documentatoin https://docs.microsoft.com/en-us/windows/uwp/devices-sensors/gatt-client they do (C#)
-			// bluetoothLeDevice.Dispose();
-			// But this member does not exist. Now its stricly not required as it will timeout, but anoying if you want to stay clean
+			}
+			if (userInput[0] == 'c' || userInput[0] == 'C')
+			{
+				wcout << "Continue..." << endl;
+				
+				auto gattServices{ bleDev.GetGattServicesAsync(BluetoothCacheMode::Uncached).get() };
+				for (GattDeviceService service : gattServices.Services()) {
+					GattCommunicationStatus gattCommunicationStatus = gattServices.Status();
+					if (gattCommunicationStatus == GattCommunicationStatus::Success) {						
+						if (service.Uuid() == ourServiceUUID) {
+							wcout << "\nFound our service...\n";
+							auto result = service.GetCharacteristicsForUuidAsync(ourCharacteristicsUUID);
+							// Let the com thread have some time to communicate
+							while (!(result.Completed() || result.ErrorCode() || i < 100)) {
+								_sleep(100);
+							}
+							if (result.ErrorCode()) {
+								wcout << "GetCharacteristicsForUuidAsync(ourCharacteristicsUUID) got error code " << result.ErrorCode() << "\n";
+							}
+							else if (result.get().Status() == GattCommunicationStatus::Success){
+								// Should only be one, but we get a vector, lets iterate
+								i = 0;
+								// GattCharacteristic c = result.Characteristics().GetAt(0);
+								for (GattCharacteristic c : result.get().Characteristics()) {
+									wcout << "  Found matching GattCharacteristic, requesting notifications. " << i << ":\t";
+									wcout << GetCharacteristicName(c).c_str() << endl;									
+									if (i == 0 && (c.CharacteristicProperties() & GattCharacteristicProperties::Notify) != GattCharacteristicProperties::None) {
+										event_token t = c.ValueChanged(myHandler);
+										c.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify);
+										_sleep(10000);
+									}
+									i++;
+								}
+								wcout << "\n\n";								
+							}
+							else {
+								wcout << "Com error"<< (int) result.GetResults().Status()<<"\n";
+							}
+						}
+					}
+				}
+			}
+			bleDev.Close();
 		}
 		catch(...){
 			wcout << "\nError or device connection lost.\n";
 		}
 	}
 	wcout << endl;
-	
-
 	return 0;
 
 }
