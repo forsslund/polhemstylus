@@ -34,12 +34,15 @@ fire_and_forget myHandler(GattCharacteristic c, GattValueChangedEventArgs const&
 	return winrt::fire_and_forget();
 }
 
-constexpr guid ourServiceUUID			= { 0x3e440001, 0xf5bb, 0x357d, { 0x71, 0x9d, 0x17, 0x92, 0x72, 0xe4, 0xd4, 0xd9 } };
-constexpr guid ourCharacteristicsUUID	= { 0x3e440002, 0xf5bb, 0x357d, { 0x71, 0x9d, 0x17, 0x92, 0x72, 0xe4, 0xd4, 0xd9 } };
+constexpr guid stylusService					= { 0x90ad0000, 0x662b, 0x4504, { 0xb8, 0x40, 0x0f, 0xf1, 0xdd, 0x28, 0xd8, 0x4e } };
+constexpr guid stylusValueCharacteristicUUID	= { 0x90ad0001, 0x662b, 0x4504, { 0xb8, 0x40, 0x0f, 0xf1, 0xdd, 0x28, 0xd8, 0x4e } };
 
 int main()
 {
     init_apartment();
+	char userInput[3];
+	userInput[0] = '\0';
+
 
  	BLEdeviceFinder* pBleFinder = BLEdeviceFinder::getInstance();
     size_t i = pBleFinder->Enumerate();
@@ -66,8 +69,6 @@ int main()
 			wcout << "BluetoothAddress: " << std::hex << bleDev.BluetoothAddress() << endl;
 			wcout << "DeviceAccessInformation: " << (uint16_t)bleDev.DeviceAccessInformation().CurrentStatus() << endl;
 
-			char userInput[3];
-			userInput[0] = '\0';
 			while (userInput[0] != 'q' && userInput[0] != 'Q' && userInput[0] != 'c') {
 				// Get services of the device
 				auto gattServices{ bleDev.GetGattServicesAsync(BluetoothCacheMode::Uncached).get() };
@@ -135,16 +136,16 @@ int main()
 				auto gattServices{ bleDev.GetGattServicesAsync(BluetoothCacheMode::Uncached).get() };
 				for (GattDeviceService service : gattServices.Services()) {
 					GattCommunicationStatus gattCommunicationStatus = gattServices.Status();
-					if (gattCommunicationStatus == GattCommunicationStatus::Success) {						
-						if (service.Uuid() == ourServiceUUID) {
+					if (gattCommunicationStatus == GattCommunicationStatus::Success) {
+						if (service.Uuid() == stylusService) {
 							wcout << "\nFound our service...\n";
-							auto result = service.GetCharacteristicsForUuidAsync(ourCharacteristicsUUID);
+							auto result = service.GetCharacteristicsForUuidAsync(stylusValueCharacteristicUUID);
 							// Let the com thread have some time to communicate
 							while (!(result.Completed() || result.ErrorCode() || i < 100)) {
 								_sleep(100);
 							}
 							if (result.ErrorCode()) {
-								wcout << "GetCharacteristicsForUuidAsync(ourCharacteristicsUUID) got error code " << result.ErrorCode() << "\n";
+								wcout << "GetCharacteristicsForUuidAsync(stylusValueCharacteristicUUID) got error code " << result.ErrorCode() << "\n";
 							}
 							else if (result.get().Status() == GattCommunicationStatus::Success){
 								// Should only be one, but we get a vector, lets iterate
@@ -156,7 +157,7 @@ int main()
 									if (i == 0 && (c.CharacteristicProperties() & GattCharacteristicProperties::Notify) != GattCharacteristicProperties::None) {
 										event_token t = c.ValueChanged(myHandler);
 										c.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify);
-										_sleep(10000);
+										cin.getline(userInput, 2);
 									}
 									i++;
 								}
@@ -175,7 +176,8 @@ int main()
 			wcout << "\nError or device connection lost.\n";
 		}
 	}
-	wcout << endl;
+	wcout << "Enter to quit";
+	cin.getline(userInput, 2);
 	return 0;
 
 }

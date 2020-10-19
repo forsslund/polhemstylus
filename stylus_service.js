@@ -4,10 +4,9 @@ var start=true;
 let StylusData = new Uint8Array(2);
 
 NRF.setServices({
-  "3e440001-f5bb-357d-719d-179272e4d4d9": {
-    "3e440002-f5bb-357d-719d-179272e4d4d9": {
+  "90ad0000-662b-4504-b840-0ff1dd28d84e": {
+    "90ad0001-662b-4504-b840-0ff1dd28d84e": {
       notify: true,
-      //description: "",
       value : StylusData,
       maxLen : 2,
       readable : true,
@@ -21,7 +20,7 @@ NRF.setServices({
 }, { uart : true });
 
 // Change the name that's advertised
-NRF.setAdvertising({"3e440001-f5bb-357d-719d-179272e4d4d9":"Stylus value"}, {name:"Stylus"});
+NRF.setAdvertising({}, {name:"Stylus"});
 
 setInterval(function() {
   if(start){
@@ -47,8 +46,8 @@ setInterval(function() {
     if(b) StylusData[0] = StylusData[0] + 128;
     
     NRF.updateServices({
-      "3e440001-f5bb-357d-719d-179272e4d4d9": {
-        "3e440002-f5bb-357d-719d-179272e4d4d9": {
+      "90ad0000-662b-4504-b840-0ff1dd28d84e": {
+        "90ad0001-662b-4504-b840-0ff1dd28d84e": {
           value: StylusData,
           notify: true
         }
