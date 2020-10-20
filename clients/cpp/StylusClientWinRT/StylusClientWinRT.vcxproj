@@ -107,7 +107,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="BLEdeviceFinder.cpp" />
-    <ClCompile Include="helpers.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
