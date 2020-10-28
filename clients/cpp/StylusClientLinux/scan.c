@@ -6,14 +6,17 @@
 
 #include "gattlib.h"
 
- #include <unistd.h> // Ola added for sleep
+ #include <unistd.h> // For sleep()
 
-#define BLE_SCAN_TIMEOUT   4
+#define BLE_SCAN_TIME   4
 
-typedef void (*ble_discovered_device_t)(const char* addr, const char* name);
+//typedef void (*ble_discovered_device_t)(const char* addr, const char* name);
 
 // We use a mutex to make the BLE connections synchronous
 static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+// Global ref to the active adapter
+void* adapter=NULL;
 
 LIST_HEAD(listhead, connection_t) g_ble_connections;
 struct connection_t {
@@ -36,7 +39,7 @@ static void *ble_connect_device(void *arg) {
 
 	printf("------------START %s ---------------\n", addr);
 
-	gatt_connection = gattlib_connect(NULL, addr, GATTLIB_CONNECTION_OPTIONS_LEGACY_DEFAULT);
+	gatt_connection = gattlib_connect(adapter, addr, GATTLIB_CONNECTION_OPTIONS_LEGACY_DEFAULT);
 	if (gatt_connection == NULL) {
 		fprintf(stderr, "Fail to connect to the bluetooth device.\n");
 		goto connection_exit;
@@ -92,6 +95,7 @@ static void ble_discovered_device(void *adapter, const char* addr, const char* n
 		printf("Discovered %s\n", addr);
 	}
 
+
 	connection = malloc(sizeof(struct connection_t));
 	if (connection == NULL) {
 		fprintf(stderr, "Failt to allocate connection.\n");
@@ -109,8 +113,7 @@ static void ble_discovered_device(void *adapter, const char* addr, const char* n
 }
 
 int main(int argc, const char *argv[]) {
-	const char* adapter_name=NULL;
-	void* adapter;
+	const char*  adapter_name=NULL;	
 	int ret;
 
 	if (argc == 1) {
@@ -131,12 +134,13 @@ int main(int argc, const char *argv[]) {
 	}
 
 	pthread_mutex_lock(&g_mutex);
-	ret = gattlib_adapter_scan_enable(adapter, ble_discovered_device, BLE_SCAN_TIMEOUT, NULL /* user_data */);
+	
+	// This call blocks for the given time
+	ret = gattlib_adapter_scan_enable(adapter, ble_discovered_device, BLE_SCAN_TIME, NULL /* user_data */);
 	if (ret) {
 		fprintf(stderr, "ERROR: Failed to scan.\n");
 		goto EXIT;
 	}
-	//sleep(20);
 	gattlib_adapter_scan_disable(adapter);
 
 	puts("Scan completed");
