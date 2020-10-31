@@ -38,7 +38,7 @@ endif()
 # Show all the warnings
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
 
-set(stylus_client_SRCS stylus_client.c)
+set(stylus_client_SRCS stylus_client.cpp)
 set(scan_SRCS scan.c)
 
 add_executable(scan ${scan_SRCS})
