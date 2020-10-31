@@ -29,6 +29,30 @@
 
 #include <thread>
 
+
+//-------- Unix sockets example -----
+
+#include <sys/un.h>
+#include <sys/socket.h>
+#include <unistd.h>     /* Prototypes for many system calls */
+#include <errno.h>      /* Declares errno and defines error constants */
+
+#define BUF_SIZE 10             /* Maximum size of messages exchanged
+                                   between client and server */
+
+#define SV_SOCK_PATH "/tmp/ud_ucase"
+void errExit(const char *str) { printf("%s",str); exit(1);}
+void fatal(const char *str) { printf("%s",str);  exit(1);}
+void usageErr(const char *str) { printf("%s",str); exit(1);}
+
+//-----------------------------------
+
+
+
+
+
+
+
 extern "C" {
 #include "gattlib.h"
 }
@@ -74,14 +98,70 @@ uint8_t prev_bt_data[] = {0,0};
 bool run_server{true};
 
 void socket_server() {
+
+    struct sockaddr_un svaddr, claddr;
+    int sfd, j;
+    ssize_t numBytes;
+    socklen_t len;
+    char buf[BUF_SIZE];
+
+    sfd = socket(AF_UNIX, SOCK_DGRAM, 0);       /* Create server socket */
+    if (sfd == -1)
+        errExit("socket");
+
+
+	struct timeval read_timeout;
+	read_timeout.tv_sec = 0;
+	read_timeout.tv_usec = 5000; // wait for messages 5ms, then check if thread should quit
+	setsockopt(sfd, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
+
+
+    /* Construct well-known address and bind server socket to it */
+
+    if (remove(SV_SOCK_PATH) == -1 && errno != ENOENT)
+        errExit("remove");
+
+    memset(&svaddr, 0, sizeof(struct sockaddr_un));
+    svaddr.sun_family = AF_UNIX;
+    strncpy(svaddr.sun_path, SV_SOCK_PATH, sizeof(svaddr.sun_path) - 1);
+
+    if (bind(sfd, (struct sockaddr *) &svaddr, sizeof(struct sockaddr_un)) == -1)
+        errExit("bind");
+
+    /* Receive messages, convert to uppercase, and return to client */
+
 	while(run_server){
+
+        len = sizeof(struct sockaddr_un);
+        numBytes = recvfrom(sfd, buf, BUF_SIZE, 0,
+                            (struct sockaddr *) &claddr, &len);
+        if (numBytes == -1)
+ 			continue; // (timeout)           errExit("recvfrom");
+
+        printf("Server received %ld bytes from %s\n", (long) numBytes,
+                claddr.sun_path);
+        /*FIXME: above: should use %zd here, and remove (long) cast */
+
+		numBytes=2;
+
+        for (j = 0; j < numBytes; j++)
+            buf[j] = bt_data[j];//toupper((unsigned char) buf[j]);
+
+        if (sendto(sfd, buf, numBytes, 0, (struct sockaddr *) &claddr, len) !=
+                numBytes)
+            fatal("sendto");
+
+
+		/*
 		if(prev_bt_data[0]!=bt_data[0] || prev_bt_data[1]!=bt_data[1] ){
 			   prev_bt_data[0]=bt_data[0];
 			   prev_bt_data[1]=bt_data[1];
 
 			   printf("Got new data in main loop: %02x %02x\n",bt_data[0],bt_data[1]);
 		   }
+		   */
 	}
+	printf("Socket server quit.\n");
 }
 
 void notification_handler(const uuid_t* uuid, const uint8_t* data, size_t data_length, void* user_data) {
@@ -156,12 +236,12 @@ int main(int argc, char *argv[]) {
 	m_main_loop = g_main_loop_new(NULL, 0);
 	g_main_loop_run(m_main_loop);
 
-	// In case we quit the main loop, clean the connection
-	gattlib_notification_stop(connection, &service_uuid);
-	g_main_loop_unref(m_main_loop);
 	run_server = false;
 	srv.join();
 
+	// In case we quit the main loop, clean the connection
+	gattlib_notification_stop(connection, &service_uuid);
+	g_main_loop_unref(m_main_loop);
 
 
 	gattlib_disconnect(connection);

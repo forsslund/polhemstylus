@@ -43,5 +43,6 @@ set(scan_SRCS scan.c)
 
 add_executable(scan ${scan_SRCS})
 add_executable(stylus_client ${stylus_client_SRCS})
+add_executable(socket_client socket_client.c)
 target_link_libraries(scan ${GATTLIB_LIBRARIES} ${GATTLIB_LDFLAGS} ${PCRE_LIBRARIES} pthread)
 target_link_libraries(stylus_client ${GATTLIB_LIBRARIES} ${GATTLIB_LDFLAGS} ${PCRE_LIBRARIES} pthread)
