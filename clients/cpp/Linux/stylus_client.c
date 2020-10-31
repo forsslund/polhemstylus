@@ -22,17 +22,51 @@
  */
 
 #include <assert.h>
-#include <glib.h>
+//#include <glib.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "gattlib.h"
 
+// ----- Portable keyboard loop break ------------------------------------------
+#ifdef WINDOWS
+#include <conio.h>
+#else
+#include <stdio.h>
+#include <sys/select.h>
+#include <sys/ioctl.h>
+#include <termios.h>
+#include <stropts.h>
+int _kbhit(){
+    static const int STDIN = 0;
+    static int initialized = 0;
+    if (!initialized){
+        // Use termios to turn off line buffering
+        struct termios term;
+        tcgetattr(STDIN, &term);
+        term.c_lflag &= ~ICANON;
+        tcsetattr(STDIN, TCSANOW, &term);
+        setbuf(stdin, NULL);
+        initialized = 1;
+    }
+    int bytesWaiting;
+    ioctl(STDIN, FIONREAD, &bytesWaiting);
+    return bytesWaiting;
+}
+#endif
+// -----------------------------------------------------------------------------
+
+
+
+
 // Battery Level UUID
 const uuid_t g_battery_level_uuid = CREATE_UUID16(0x2A19);
 
-static GMainLoop *m_main_loop;
+//static GMainLoop *m_main_loop;
+
+uint8_t bt_data[] = {0,0};
+uint8_t prev_bt_data[] = {0,0};
 
 void notification_handler(const uuid_t* uuid, const uint8_t* data, size_t data_length, void* user_data) {
 	int i;
@@ -41,14 +75,17 @@ void notification_handler(const uuid_t* uuid, const uint8_t* data, size_t data_l
 
 	for (i = 0; i < data_length; i++) {
 		printf("%02x ", data[i]);
+		if(i<2)
+			bt_data[i]=data[i];
 	}
 	printf("\n");
 }
 
+/*
 static void on_user_abort(int arg) {
 	g_main_loop_quit(m_main_loop);
 }
-
+*/
 
 int main(int argc, char *argv[]) {
 	int ret;
@@ -95,14 +132,25 @@ int main(int argc, char *argv[]) {
 	}
 
 	// Catch CTRL-C
-	signal(SIGINT, on_user_abort);
+	//signal(SIGINT, on_user_abort);
 
-	m_main_loop = g_main_loop_new(NULL, 0);
-	g_main_loop_run(m_main_loop);
+	//m_main_loop = g_main_loop_new(NULL, 0);
+	//g_main_loop_run(m_main_loop);
+	printf("Press any key to quit...\n");
+    while(!_kbhit()){
+		if(prev_bt_data[0]!=bt_data[0] || prev_bt_data[1]!=bt_data[1] ){
+			   prev_bt_data[0]=bt_data[0];
+			   prev_bt_data[1]=bt_data[1];
+
+			   printf("Got new data in main loop: %02x %02x\n",bt_data[0],bt_data[1]);
+		   }
+		// Wait for socket message here
+		// if message, then reply prev_bt_data
+	}
 
 	// In case we quit the main loop, clean the connection
 	gattlib_notification_stop(connection, &service_uuid);
-	g_main_loop_unref(m_main_loop);
+	//g_main_loop_unref(m_main_loop);
 
 DISCONNECT:
 	gattlib_disconnect(connection);
