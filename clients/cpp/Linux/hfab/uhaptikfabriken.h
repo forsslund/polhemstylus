@@ -99,7 +99,7 @@
 
 // -----------------------------------------------------------------------------
 namespace haptikfabriken {
-static const char* version = "0.2 2020-11-02";
+static const char* version = "0.2 2020-11-02 13:50";
 
 // ---- Socket hack code -----------
 #define BUF_SIZE 10             /* Maximum size of messages exchanged
@@ -342,8 +342,8 @@ struct position_hid_to_pc_message {
          // -234.231 -234.121 -234.123 -1.2324 -1.1232 -1.1242 -1.2324 1
            int n = sprintf(c, "% 8.3f % 8.3f % 8.3f % 7.4f % 7.4f % 7.4f % 7.4f %hd\n", x_mm, y_mm, z_mm, tA, lambda, tD, tE, info);
            while(n<63) c[n++] = ' ';
-           c[63]='\n';
-           return 64;
+           c[62]='\n';
+           return 63;
        }
 
 
@@ -379,8 +379,8 @@ struct pc_to_hid_message {  // 7*2 = 14 bytes + 1 inital byte always 0
     int n = sprintf(c, "%hd %hd %hd %hd %hd %hd %hd", current_motor_a_mA, current_motor_b_mA,
                    current_motor_c_mA, command, command_attr0, command_attr1, command_attr2);
     while(n<63) c[n++] = ' ';
-    c[63]='\n';
-    return 64;
+    c[62]='\n';
+    return 63;
   }
 
   void fromChars(const char *c) {
@@ -417,9 +417,9 @@ void PJRCSerialComm::close(){
 
 void PJRCSerialComm::send(const pc_to_hid_message &msg)
 {
-    int len=64;
+    int len=63;
     char buf[64];
-    memset(buf, '0', len);
+    memset(buf, '0', 64);
     len = msg.toChars(buf);
     transmit_bytes(fd, buf, len);
 }
@@ -429,7 +429,7 @@ void PJRCSerialComm::receive(position_hid_to_pc_message &msg)
     constexpr int len=64;
     char buf[len];
     memset(buf, '0', len);
-    receive_bytes(fd, buf, len);
+    receive_bytes(fd, buf, 63);
     msg.fromChars(buf);
 }
 
