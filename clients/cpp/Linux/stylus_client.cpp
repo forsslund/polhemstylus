@@ -130,6 +130,7 @@ void socket_server() {
 
     /* Receive messages, convert to uppercase, and return to client */
 
+	printf("Starting socket server \n");
 	while(run_server){
 
         len = sizeof(struct sockaddr_un);
@@ -138,8 +139,7 @@ void socket_server() {
         if (numBytes == -1)
  			continue; // (timeout)           errExit("recvfrom");
 
-        printf("Server received %ld bytes from %s\n", (long) numBytes,
-                claddr.sun_path);
+        //printf("Server received %ld bytes from %s\n", (long) numBytes, claddr.sun_path);
         /*FIXME: above: should use %zd here, and remove (long) cast */
 
 		numBytes=2;

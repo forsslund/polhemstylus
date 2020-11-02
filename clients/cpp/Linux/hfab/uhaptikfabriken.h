@@ -1,6 +1,8 @@
 #ifndef UHAPTIKFABRIKEN_H
 #define UHAPTIKFABRIKEN_H
 
+//#define USE_BT
+
 // -----------------------------------------------------------------------------
 // Haptikfabriken micro API v0.1
 //
@@ -97,7 +99,7 @@
 
 // -----------------------------------------------------------------------------
 namespace haptikfabriken {
-
+static const char* version = "0.2 2020-11-02";
 
 // ---- Socket hack code -----------
 #define BUF_SIZE 10             /* Maximum size of messages exchanged
@@ -591,6 +593,10 @@ unsigned int HaptikfabrikenInterface::findUSBSerialDevices(){
             return 1;
         }
     }
+#else
+    // TODO: Implement search
+    serialport_name = "/dev/ttyACM0";
+    return 1;
 #endif
     return 0;
 }
@@ -599,6 +605,7 @@ int HaptikfabrikenInterface::open(std::string port){
     sc.open(port);
     sc.sendWakeupMessage();
 
+#ifdef USE_BT    
     // Open BT
     sfd = socket(AF_UNIX, SOCK_DGRAM, 0);
     if (sfd == -1)
@@ -612,7 +619,7 @@ int HaptikfabrikenInterface::open(std::string port){
     memset(&svaddr, 0, sizeof(struct sockaddr_un));
     svaddr.sun_family = AF_UNIX;
     strncpy(svaddr.sun_path, SV_SOCK_PATH, sizeof(svaddr.sun_path) - 1);
-   
+#endif   
 
 
     return 0;
@@ -629,16 +636,20 @@ fsVec3d HaptikfabrikenInterface::getPos(){
 
 fsRot HaptikfabrikenInterface::getRot(){
     // Get BT
-    msgLen = 3;
-    if (sendto(sfd, "abc", msgLen, 0, (struct sockaddr *) &svaddr,
+#ifdef USE_BT
+    msgLen = 2;
+    if (sendto(sfd, "ab", msgLen, 0, (struct sockaddr *) &svaddr,
         sizeof(struct sockaddr_un)) != msgLen)
         fatal("sendto");
     numBytes = recvfrom(sfd, resp, BUF_SIZE, 0, NULL, NULL);
     if (numBytes == -1)
         errExit("recvfrom");
-    printf("Response %02x %02x \n", resp[0],resp[1]);
    
-
+    bool btn = resp[0]&0x80;
+    int tE_count = (resp[0]&0x03) << 8 | resp[1]; // 10 bit rotation
+    msg.tE = 2*3.1415926535897*tE_count / 1024;
+#endif
+    //printf("Response %02x %02x n: %d btn: %d\n", resp[0],resp[1], tE_count, btn);
 
     fsRot rA, rC, rD, rE;
     rA.rot_z(msg.tA);
