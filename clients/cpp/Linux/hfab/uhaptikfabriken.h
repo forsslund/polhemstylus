@@ -78,7 +78,7 @@
 
 
 
-
+#ifdef USE_BT
 // ---------- Includes for unix sockets ------------
 #include <sys/un.h>
 #include <sys/socket.h>
@@ -88,7 +88,7 @@
 #include <unistd.h>     /* Prototypes for many system calls */
 #include <errno.h>      /* Declares errno and defines error constants */
 // -------------------------------------------------
-
+#endif
 
 
 
@@ -570,12 +570,14 @@ private:
     position_hid_to_pc_message msg;
 
 
+#ifdef USE_BT
     // Socket stuff
     struct sockaddr_un svaddr, claddr;
     int sfd, j;
     size_t msgLen;
     ssize_t numBytes;
     u_int8_t resp[BUF_SIZE];
+#endif
 
 };
 

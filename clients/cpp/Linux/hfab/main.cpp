@@ -1,6 +1,10 @@
 
 
-#define LINUX
+#ifdef _WIN32
+    #define WINDOWS
+#else
+    #define LINUX
+#endif
 
 #include <iostream>
 #include "uhaptikfabriken.h"
@@ -41,8 +45,8 @@ int main()
     using namespace haptikfabriken;
 
     HaptikfabrikenInterface hfab;
-    //hfab.findUSBSerialDevices();
-    hfab.serialport_name = "/dev/ttyACM0";
+    hfab.findUSBSerialDevices();
+    //hfab.serialport_name = "/dev/ttyACM0";
     std::cout << "Opening " << hfab.serialport_name << "\n";
     hfab.open();
 
