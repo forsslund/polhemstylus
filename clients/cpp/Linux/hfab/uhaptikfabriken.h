@@ -5,9 +5,14 @@
 //#define USE_BT
 
 namespace haptikfabriken {
-static const char* version = "0.2 2020-11-03 14:00";
+static const char* version = "0.2 2020-11-04 19:30";
 constexpr int buf_len = 64;
 }
+
+// 
+// Linux TODO: Implement settings equivalent of:
+// stty -F /dev/ttyACM0 -icrnl -imaxbel -opost -isig -icanon -iexten -echo -echoe -echok -echoctl -echoke
+//
 
 // -----------------------------------------------------------------------------
 // Haptikfabriken micro API v0.1
@@ -153,8 +158,15 @@ void wait_online(PORTTYPE port)
         fflush(stdout);
         buf[0] = '\n';
         r = transmit_bytes(port, buf, 1);
-        r = receive_bytes(port, buf, buf_len);
-        if (r == buf_len) break; // success, device online
+        r = receive_bytes(port, buf, 8);
+        r = receive_bytes(port, buf, 8);
+        r = receive_bytes(port, buf, 8);
+        r = receive_bytes(port, buf, 8);
+        r = receive_bytes(port, buf, 8);
+        r = receive_bytes(port, buf, 8);
+        r = receive_bytes(port, buf, 8);
+        r = receive_bytes(port, buf, 8);
+        if (r == 8) break; // success, device online
     }
     printf("ok\n");
 }
@@ -247,15 +259,16 @@ int receive_bytes(PORTTYPE port, char *buf, int len)
         //printf("read, r = %d (retry %d)\n", r, retry);
         if (r < 0 && errno != EAGAIN && errno != EINTR) return -1;
         else if (r > 0) count += r;
-        else if(false){
+        else if(retry>500){
             std::cout << "no data available right now, must wait\n";
             // no data available right now, must wait
+            
             fd_set fds;
             struct timeval t;
             FD_ZERO(&fds);
             FD_SET(port, &fds);
             t.tv_sec = 0;
-            t.tv_usec = 10;
+            t.tv_usec = 100;
             r = select(port+1, &fds, NULL, NULL, &t);
             //printf("select, r = %d\n", r);
             if (r < 0) return -1;
@@ -321,17 +334,17 @@ void close_port(PORTTYPE port)
 // Haptikfabriken code
 // -----------------------------------------------------------------------------
 struct position_hid_to_pc_message {
-    float x_mm;
-    float y_mm;
-    float z_mm;
-    short a_ma;
-    short b_ma;
-    short c_ma;
-    short info;
-    float tA;
-    float lambda;
-    float tD;
-    float tE;
+    float x_mm{0};
+    float y_mm{0};
+    float z_mm{0};
+    short a_ma{0};
+    short b_ma{0};
+    short c_ma{0};
+    short info{0};
+    float tA{0};
+    float lambda{0};
+    float tD{0};
+    float tE{0};
     /*
     int toChars(char *c){
       // 012345678901234567890123456789012345678901234567890123456789123
@@ -356,10 +369,9 @@ struct position_hid_to_pc_message {
 
     void fromChars(const char *c){
         #ifdef WINDOWS 
-            sscanf_s(c, "%f %f %f %f %f %f %f %hd\n", &x_mm, &y_mm, &z_mm, &tA, &lambda, &tD, &tE, &info);
+            sscanf_s(c, "%f %f %f %f %f %f %f %hd", &x_mm, &y_mm, &z_mm, &tA, &lambda, &tD, &tE, &info);
         #else
-            sscanf(c, "%f %f %f ", &x_mm, &y_mm, &z_mm);
-//            sscanf(c, "%f %f %f %f %f %f %f", &x_mm, &y_mm, &z_mm, &tA, &lambda, &tD, &tE);
+            sscanf(c, "%f %f %f %f %f %f %f %hd", &x_mm, &y_mm, &z_mm, &tA, &lambda, &tD, &tE, &info);
         #endif
     }
     std::string toString() { char c[256]; for(int i=0;i<255;++i) c[i]=0; toChars(c); return std::string(c);}
@@ -418,6 +430,11 @@ private:
 void PJRCSerialComm::open(std::string port) {
     fd = open_port_and_set_baud_or_die(port.c_str(), BAUD);
     wait_online(fd);
+    char buf[1];
+            int aa=0;
+            int bb=0;
+            while(bb=receive_bytes(fd, buf, 1)>0){aa+=bb;}
+            printf("Flushed %d bytes\n",aa);
 }
 
 void PJRCSerialComm::close(){
@@ -429,22 +446,21 @@ void printBuf(char* buf, std::string str, bool header=true){
         std::cout << str << " [0123456789012345678901234567890123456789012345678901234567890123]\n";
     std::cout << str << " [";
     int i;
-    for(i=0;i<64;++i){
+    for(i=0;i<buf_len+1;++i){
         if(buf[i]==0) { std::cout << "#"; continue; };
         if(buf[i]=='\n') { std::cout << "N"; continue; }
         if(buf[i]=='\r') { std::cout << "R"; continue; }
         if(buf[i]==' ')  { std::cout << "_"; continue; }
         std::cout << buf[i];
     }
-    std::cout << "] Size: " << i <<"\n";
+    std::cout << "] Size (including null character): " << i <<"\n";
 }
 
 void PJRCSerialComm::send(const pc_to_hid_message &msg)
 {
-    int len=buf_len;
-    char buf[len+1];
-    memset(buf, '\0', len+1);
-    len = msg.toChars(buf);
+    char buf[buf_len+1];
+    memset(buf, '\0', buf_len+1);
+    int len = msg.toChars(buf);
     //std::cout << len;
     //printBuf(buf, " send   ",false);
     //std::cout << "len " << len << "\n";
@@ -456,11 +472,39 @@ int PJRCSerialComm::receive(position_hid_to_pc_message &msg)
     constexpr int len=buf_len;
     char buf[len+1];
     memset(buf, '\0', len+1);
-    int a = receive_bytes(fd, buf, len);
+    int a = 0;
+    int rr=0;
+    int maxredo=10;
+    for(a=0;a<64;a+=8){
+        rr+=receive_bytes(fd, buf+a, 8);
+        if(buf[a]==0){
+            a-=8; // redo
+            maxredo--;
+            if(!maxredo){
+                printf("Max redo!\n");
+                // Search for \n
+                int aa=0;
+                int bb=0;
+                while(bb=receive_bytes(fd, buf, 1)>0){aa+=bb;}
+                printf("Flushed %d bytes!\n",aa);
+                
+                return 1;
+            }
+        }
+    //printBuf(buf, " receive",false);
+        }
     
-    if(a<buf_len || buf[buf_len-1]!='\n' || buf[buf_len]!='\0'){
+    if(rr!=buf_len || buf[buf_len-1]!='\n' || buf[buf_len]!='\0'){
         std::cout << a;
-        printBuf(buf, " receive",false);
+       // printBuf(buf, " receive",false);
+
+        if(buf[buf_len-1]!='\n'){
+            // Search for \n
+            int aa=0;
+            int bb=0;
+            while(bb=receive_bytes(fd, buf, 1)>0){aa+=bb;}
+            printf("Flushed %d bytes!\n",aa);
+        }
 
         return 1;
     }
