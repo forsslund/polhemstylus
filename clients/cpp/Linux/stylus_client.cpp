@@ -96,6 +96,7 @@ static GMainLoop *m_main_loop;
 uint8_t bt_data[] = {0,0};
 uint8_t prev_bt_data[] = {0,0};
 bool run_server{true};
+bool user_requested_data{false};
 
 void socket_server() {
 
@@ -138,6 +139,9 @@ void socket_server() {
                             (struct sockaddr *) &claddr, &len);
         if (numBytes == -1)
  			continue; // (timeout)           errExit("recvfrom");
+
+		// We have received request for data
+		user_requested_data = 1;
 
         //printf("Server received %ld bytes from %s\n", (long) numBytes, claddr.sun_path);
         /*FIXME: above: should use %zd here, and remove (long) cast */

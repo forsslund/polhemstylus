@@ -61,13 +61,13 @@ setInterval(function() {
   if(start){
     // Need firmware 2v02. Might be good to only sample stylus pos while 
     // connected. And only update on changed value.+
-    //if( NRF.getSecurityStatus()=={connected:false} )
-    //{
-    //  LED1.set();
-    //}
-    //else{
-    //  LED1.reset();
-    //}
+    if( NRF.getSecurityStatus()=={connected:false} )
+    {
+      LED2.set();
+    }
+    else{
+      LED2.reset();
+    }
     
     
     
@@ -103,7 +103,7 @@ setTimeout(function() {
 
 pinMode(pin_button, 'input_pullup');
 var b2 = function(state){
-  LED2.write(!state.state);
+  //LED2.write(!state.state);
 };
 setWatch(b2, pin_button, {repeat:true, edge:"both", debounce:"10"});
 
