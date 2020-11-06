@@ -47,12 +47,6 @@ void usageErr(const char *str) { printf("%s",str); exit(1);}
 
 //-----------------------------------
 
-
-
-
-
-
-
 extern "C" {
 #include "gattlib.h"
 }
@@ -86,7 +80,7 @@ int _kbhit(){
 // -----------------------------------------------------------------------------
 
 
-volatile bool clientGotLatestValue=false;
+volatile bool newSocketRequest=false;
 
 
 // Battery Level UUID
@@ -161,31 +155,26 @@ void socket_server() {
 			   printf("Got new data in main loop: %02x %02x\n",bt_data[0],bt_data[1]);
 		   }
 		   */
-		clientGotLatestValue = true;
+		newSocketRequest = true;
 	}
 	printf("Socket server quit.\n");
 }
-
 
 gatt_connection_t* g_connection;
 void* adapter=NULL;
 const char* device_address=NULL;
 uuid_t service_uuid;
-bool connectionActive=false;
 
 void notification_handler(const uuid_t* uuid, const uint8_t* data, size_t data_length, void* user_data) {
 	int i;
 	char str[256];
-	connectionActive=true;
-	//printf("Notification Handler: ");
 	
 	for (i = 0; i < data_length; i++) {
 		g_log(NULL, G_LOG_LEVEL_DEBUG, "%02x ", data[i]);		
 		if(i<2)
 			bt_data[i]=data[i];
 	}
-	clientGotLatestValue=false;
-	//printf("\n");
+	newSocketRequest = false;
 }
 
 
@@ -200,14 +189,13 @@ bool deActivateConnection(){
 		gattlib_notification_stop(g_connection, &service_uuid);
 		gattlib_disconnect(g_connection);
 		g_connection=NULL;
-		clientGotLatestValue=false;
+		newSocketRequest=false;
 		return false;
 }
 
 void disconnected_handler(void *){
 		static int nrDisconnects=0;
-		nrDisconnects++;		
-		connectionActive = false;
+		nrDisconnects++;
 		g_log(NULL, G_LOG_LEVEL_DEBUG, "Disconnected %i",nrDisconnects);
 		deActivateConnection();	
 }
@@ -243,7 +231,7 @@ static void on_user_abort(int arg) {
 
 gboolean monitorConnection(gpointer user_data){
 	static int ideling;
-	if( clientGotLatestValue == false ){
+	if( newSocketRequest == false ){
 		if(g_connection != NULL){
 			ideling++;
 			if(ideling>10000){
@@ -257,6 +245,7 @@ gboolean monitorConnection(gpointer user_data){
 		if(g_connection==NULL)
 		{
 			activateConnection();
+			newSocketRequest=false; // Only attempt reconnect once per socket request
 		}
 	}
 	return true;	
