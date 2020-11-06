@@ -1,18 +1,7 @@
 #ifndef UHAPTIKFABRIKEN_H
 #define UHAPTIKFABRIKEN_H
 
-#include <iostream>
 //#define USE_BT
-
-namespace haptikfabriken {
-static const char* version = "0.2 2020-11-04 19:30";
-constexpr int buf_len = 64;
-}
-
-// 
-// Linux TODO: Implement settings equivalent of:
-// stty -F /dev/ttyACM0 -icrnl -imaxbel -opost -isig -icanon -iexten -echo -echoe -echok -echoctl -echoke
-//
 
 // -----------------------------------------------------------------------------
 // Haptikfabriken micro API v0.1
@@ -110,6 +99,7 @@ constexpr int buf_len = 64;
 
 // -----------------------------------------------------------------------------
 namespace haptikfabriken {
+static const char* version = "0.2 2020-11-02 13:50";
 
 // ---- Socket hack code -----------
 #define BUF_SIZE 10             /* Maximum size of messages exchanged
@@ -148,7 +138,7 @@ void delay(double sec)
 // as soon as it properly responds, we know it's running
 void wait_online(PORTTYPE port)
 {
-    char buf[buf_len+1];
+    char buf[64];
     int r;
 
     printf("waiting for board to be ready:\n");
@@ -158,15 +148,8 @@ void wait_online(PORTTYPE port)
         fflush(stdout);
         buf[0] = '\n';
         r = transmit_bytes(port, buf, 1);
-        r = receive_bytes(port, buf, 8);
-        r = receive_bytes(port, buf, 8);
-        r = receive_bytes(port, buf, 8);
-        r = receive_bytes(port, buf, 8);
-        r = receive_bytes(port, buf, 8);
-        r = receive_bytes(port, buf, 8);
-        r = receive_bytes(port, buf, 8);
-        r = receive_bytes(port, buf, 8);
-        if (r == 8) break; // success, device online
+        r = receive_bytes(port, buf, 63);
+        if (r == 63) break; // success, device online
     }
     printf("ok\n");
 }
@@ -256,26 +239,24 @@ int receive_bytes(PORTTYPE port, char *buf, int len)
     fcntl(port, F_SETFL, fcntl(port, F_GETFL) | O_NONBLOCK);
     while (count < len) {
         r = read(port, buf + count, len - count);
-        //printf("read, r = %d (retry %d)\n", r, retry);
+        //printf("read, r = %d\n", r);
         if (r < 0 && errno != EAGAIN && errno != EINTR) return -1;
         else if (r > 0) count += r;
-        else if(retry>500){
-            std::cout << "no data available right now, must wait\n";
+        else {
             // no data available right now, must wait
-            
             fd_set fds;
             struct timeval t;
             FD_ZERO(&fds);
             FD_SET(port, &fds);
-            t.tv_sec = 0;
-            t.tv_usec = 100;
+            t.tv_sec = 1;
+            t.tv_usec = 0;
             r = select(port+1, &fds, NULL, NULL, &t);
             //printf("select, r = %d\n", r);
             if (r < 0) return -1;
             if (r == 0) return count; // timeout
         }
         retry++;
-        if (retry > 2000) return -100; // no input
+        if (retry > 1000) return -100; // no input
     }
     fcntl(port, F_SETFL, fcntl(port, F_GETFL) & ~O_NONBLOCK);
 #elif defined(WINDOWS)
@@ -334,17 +315,17 @@ void close_port(PORTTYPE port)
 // Haptikfabriken code
 // -----------------------------------------------------------------------------
 struct position_hid_to_pc_message {
-    float x_mm{0};
-    float y_mm{0};
-    float z_mm{0};
-    short a_ma{0};
-    short b_ma{0};
-    short c_ma{0};
-    short info{0};
-    float tA{0};
-    float lambda{0};
-    float tD{0};
-    float tE{0};
+    float x_mm;
+    float y_mm;
+    float z_mm;
+    short a_ma;
+    short b_ma;
+    short c_ma;
+    short info;
+    float tA;
+    float lambda;
+    float tD;
+    float tE;
     /*
     int toChars(char *c){
       // 012345678901234567890123456789012345678901234567890123456789123
@@ -360,18 +341,17 @@ struct position_hid_to_pc_message {
          //  -59.276   13.383 -148.002   0.0919 -1.8483  1.0370 -1.9512 0
          // -234.231 -234.121 -234.123 -1.2324 -1.1232 -1.1242 -1.2324 1
            int n = sprintf(c, "% 8.3f % 8.3f % 8.3f % 7.4f % 7.4f % 7.4f % 7.4f %hd\n", x_mm, y_mm, z_mm, tA, lambda, tD, tE, info);
-            while(n<buf_len) c[n++] = ' ';
-            c[buf_len-1]='\n';
-            c[buf_len]=0;
-            return buf_len;
+           while(n<63) c[n++] = ' ';
+           c[62]='\n';
+           return 63;
        }
 
 
     void fromChars(const char *c){
         #ifdef WINDOWS 
-            sscanf_s(c, "%f %f %f %f %f %f %f %hd", &x_mm, &y_mm, &z_mm, &tA, &lambda, &tD, &tE, &info);
+            sscanf_s(c, "%f %f %f %f %f %f %f %hd\n", &x_mm, &y_mm, &z_mm, &tA, &lambda, &tD, &tE, &info);
         #else
-            sscanf(c, "%f %f %f %f %f %f %f %hd", &x_mm, &y_mm, &z_mm, &tA, &lambda, &tD, &tE, &info);
+            sscanf(c, "%f %f %f %f %f %f %f %hd\n", &x_mm, &y_mm, &z_mm, &tA, &lambda, &tD, &tE, &info);
         #endif
     }
     std::string toString() { char c[256]; for(int i=0;i<255;++i) c[i]=0; toChars(c); return std::string(c);}
@@ -379,13 +359,13 @@ struct position_hid_to_pc_message {
 
 struct pc_to_hid_message {  // 7*2 = 14 bytes + 1 inital byte always 0
   unsigned char reportid = 0;
-  short current_motor_a_mA{0};
-  short current_motor_b_mA{0};
-  short current_motor_c_mA{0};
+  short current_motor_a_mA;
+  short current_motor_b_mA;
+  short current_motor_c_mA;
   short command{2}; // e.g. reset encoders
-  short command_attr0{0};
-  short command_attr1{0};
-  short command_attr2{0};
+  short command_attr0;
+  short command_attr1;
+  short command_attr2;
   /*
   int toChars(char *c) const {
     int n = sprintf(c, "%hd %hd %hd %hd %hd %hd %hd", current_motor_a_mA, current_motor_b_mA,
@@ -398,10 +378,9 @@ struct pc_to_hid_message {  // 7*2 = 14 bytes + 1 inital byte always 0
   int toChars(char *c) const {
     int n = sprintf(c, "%hd %hd %hd %hd %hd %hd %hd", current_motor_a_mA, current_motor_b_mA,
                    current_motor_c_mA, command, command_attr0, command_attr1, command_attr2);
-    while(n<buf_len) c[n++] = ' ';
-    c[buf_len-1]='\n';
-    c[buf_len]=0;
-    return buf_len;
+    while(n<63) c[n++] = ' ';
+    c[62]='\n';
+    return 63;
   }
 
   void fromChars(const char *c) {
@@ -422,7 +401,7 @@ public:
     void open(std::string portname);
     void close();
     void send(const pc_to_hid_message& msg);
-    int receive(position_hid_to_pc_message& msg);
+    void receive(position_hid_to_pc_message& msg);
 private:
     PORTTYPE fd;
 };
@@ -430,87 +409,28 @@ private:
 void PJRCSerialComm::open(std::string port) {
     fd = open_port_and_set_baud_or_die(port.c_str(), BAUD);
     wait_online(fd);
-    char buf[1];
-            int aa=0;
-            int bb=0;
-            while(bb=receive_bytes(fd, buf, 1)>0){aa+=bb;}
-            printf("Flushed %d bytes\n",aa);
 }
 
 void PJRCSerialComm::close(){
     close_port(fd);
 }
 
-void printBuf(char* buf, std::string str, bool header=true){
-    if(header)
-        std::cout << str << " [0123456789012345678901234567890123456789012345678901234567890123]\n";
-    std::cout << str << " [";
-    int i;
-    for(i=0;i<buf_len+1;++i){
-        if(buf[i]==0) { std::cout << "#"; continue; };
-        if(buf[i]=='\n') { std::cout << "N"; continue; }
-        if(buf[i]=='\r') { std::cout << "R"; continue; }
-        if(buf[i]==' ')  { std::cout << "_"; continue; }
-        std::cout << buf[i];
-    }
-    std::cout << "] Size (including null character): " << i <<"\n";
-}
-
 void PJRCSerialComm::send(const pc_to_hid_message &msg)
 {
-    char buf[buf_len+1];
-    memset(buf, '\0', buf_len+1);
-    int len = msg.toChars(buf);
-    //std::cout << len;
-    //printBuf(buf, " send   ",false);
-    //std::cout << "len " << len << "\n";
+    int len=63;
+    char buf[64];
+    memset(buf, '0', 64);
+    len = msg.toChars(buf);
     transmit_bytes(fd, buf, len);
 }
 
-int PJRCSerialComm::receive(position_hid_to_pc_message &msg)
+void PJRCSerialComm::receive(position_hid_to_pc_message &msg)
 {
-    constexpr int len=buf_len;
-    char buf[len+1];
-    memset(buf, '\0', len+1);
-    int a = 0;
-    int rr=0;
-    int maxredo=10;
-    for(a=0;a<64;a+=8){
-        rr+=receive_bytes(fd, buf+a, 8);
-        if(buf[a]==0){
-            a-=8; // redo
-            maxredo--;
-            if(!maxredo){
-                printf("Max redo!\n");
-                // Search for \n
-                int aa=0;
-                int bb=0;
-                while(bb=receive_bytes(fd, buf, 1)>0){aa+=bb;}
-                printf("Flushed %d bytes!\n",aa);
-                
-                return 1;
-            }
-        }
-    //printBuf(buf, " receive",false);
-        }
-    
-    if(rr!=buf_len || buf[buf_len-1]!='\n' || buf[buf_len]!='\0'){
-        std::cout << a;
-       // printBuf(buf, " receive",false);
-
-        if(buf[buf_len-1]!='\n'){
-            // Search for \n
-            int aa=0;
-            int bb=0;
-            while(bb=receive_bytes(fd, buf, 1)>0){aa+=bb;}
-            printf("Flushed %d bytes!\n",aa);
-        }
-
-        return 1;
-    }
-    
+    constexpr int len=64;
+    char buf[len];
+    memset(buf, '0', len);
+    receive_bytes(fd, buf, 63);
     msg.fromChars(buf);
-    return 0;
 }
 
 struct fsVec3d {
@@ -712,15 +632,7 @@ void HaptikfabrikenInterface::close(){
 }
 
 fsVec3d HaptikfabrikenInterface::getPos(){
-    position_hid_to_pc_message new_msg;
-    if(sc.receive(new_msg)){ // Error reading, use 
-        //pc_to_hid_message m;
-        //position_hid_to_pc_message m;
-        //msg = m;
-        //sc.send(m);
-        //getPos(); // try again
-    } else 
-        msg = new_msg;
+    sc.receive(msg);
     return fsVec3d(msg.x_mm*0.001,msg.y_mm*0.001,msg.z_mm*0.001);
 }
 
