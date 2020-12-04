@@ -1,0 +1,5 @@
+#!/bin/bash
+exec 1> >(logger -s -t $(basename $0)) 2>&1
+stylus_client D5:D0:DB:4F:44:A3 &
+
+

@@ -170,7 +170,7 @@ void notification_handler(const uuid_t* uuid, const uint8_t* data, size_t data_l
 	char str[256];
 	
 	for (i = 0; i < data_length; i++) {
-		g_log(NULL, G_LOG_LEVEL_DEBUG, "%02x ", data[i]);		
+		//g_log(NULL, G_LOG_LEVEL_DEBUG, "%02x ", data[i]);		
 		if(i<2)
 			bt_data[i]=data[i];
 	}
