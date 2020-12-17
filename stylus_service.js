@@ -63,10 +63,10 @@ setInterval(function() {
     // connected. And only update on changed value.+
     if( NRF.getSecurityStatus()=={connected:false} )
     {
-      LED2.set();
+      //LED2.set();
     }
     else{
-      LED2.reset();
+      //LED2.reset();
     }
     
     
@@ -103,7 +103,7 @@ setTimeout(function() {
 
 pinMode(pin_button, 'input_pullup');
 var b2 = function(state){
-  //LED2.write(!state.state);
+  LED2.write(!state.state);
 };
 setWatch(b2, pin_button, {repeat:true, edge:"both", debounce:"10"});
 
@@ -112,4 +112,4 @@ var on = false;
 setInterval(function() {
   on = !on;
   LED1.write(on);
-}, 1000);
+}, 500); 
