@@ -35,8 +35,8 @@ NRF.setServices({
   }
 }, { uart : true });
 
-// Change the name that's advertised
-NRF.setAdvertising({}, {name:"Stylus"});
+// Change the name that's adveprtised
+NRF.setAdvertising({}, {name:"Polhem Stylus"});
 
 getRotation = function() {
   let d=0;
@@ -57,41 +57,49 @@ getButtonState = function() {
   return !digitalRead(pin_button);
 };
 
+var on = false;
+
 setInterval(function() {
   if(start){
-    // Need firmware 2v02. Might be good to only sample stylus pos while 
-    // connected. And only update on changed value.+
-    if( NRF.getSecurityStatus()=={connected:false} )
-    {
-      //LED2.set();
-    }
-    else{
-      //LED2.reset();
-    }
-    
-    
-    
-    a++;
-    b=!b;
-    if(a>1024) a=0;
-    
+//    // Need firmware 2v02. Might be good to only sample stylus pos while 
+//    // connected. And only update on changed value.+
+//    if( NRF.getSecurityStatus()=={connected:false} )
+//    {
+//      LED1.write(false);
+//    }
+//    else{
+//      // Blink for "alive"
+//      on = !on;
+//      LED1.write(on);
+//    }
+  
+    var preA=a;
+    var preB=b;
     a = getRotation();
     b = getButtonState();
     
-    // Pack message
-    StylusData[0] = a>>8;    
-    StylusData[1] = a - 256*StylusData[0];    
-    
-    if(b) StylusData[0] = StylusData[0] + 128;
-    
-    NRF.updateServices({
-      "90ad0000-662b-4504-b840-0ff1dd28d84e": {
-        "90ad0001-662b-4504-b840-0ff1dd28d84e": {
-          value: StylusData,
-          notify: true
+    // Only send data if new information
+    if( a!=preA || b!=preB )
+    {
+      // Pack message
+      StylusData[0] = a>>8;    
+      StylusData[1] = a - 256*StylusData[0];    
+
+      if(b) StylusData[0] = StylusData[0] + 128;
+
+      NRF.updateServices({
+        "90ad0000-662b-4504-b840-0ff1dd28d84e": {
+          "90ad0001-662b-4504-b840-0ff1dd28d84e": {
+            value: StylusData,
+            notify: true
+          }
         }
-      }
-    });
+      });
+      //LED1.write(true);
+    }
+    else{
+      //LED1.write(false);
+    }
   }
 },20);
 
@@ -106,10 +114,3 @@ var b2 = function(state){
   LED2.write(!state.state);
 };
 setWatch(b2, pin_button, {repeat:true, edge:"both", debounce:"10"});
-
-// Blink for "alive"
-var on = false;
-setInterval(function() {
-  on = !on;
-  LED1.write(on);
-}, 500); 
