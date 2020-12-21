@@ -13,6 +13,10 @@ const pin_button = D31;
 const pin_white_to_sensor_clk = D27;
 const pin_dummy = D15; // Some unused pin
 
+const READ_INTERVAL_LOW = 1000;  // ms
+const READ_INTERVAL_HI  = 20;    // ms
+const INACTIVE_THRESHOLD= 1000;  // number of READ_INTERVAL_HI before going to low activity mode
+
 var a=1;
 var b=0;
 var start=true;
@@ -57,9 +61,12 @@ getButtonState = function() {
   return !digitalRead(pin_button);
 };
 
-var on = false;
-
-setInterval(function() {
+//var on = false;
+var inactiveCounter = 0;               // Keeps track of activity
+var updatePossitionIntervalID = null;  // Handle to intervall callback
+var readModeHi = true;
+function updatePossition()
+ {
   if(start){
 //    // Need firmware 2v02. Might be good to only sample stylus pos while 
 //    // connected. And only update on changed value.+
@@ -81,6 +88,8 @@ setInterval(function() {
     // Only send data if new information
     if( a!=preA || b!=preB )
     {
+      inactiveCounter = 0; 
+      
       // Pack message
       StylusData[0] = a>>8;    
       StylusData[1] = a - 256*StylusData[0];    
@@ -94,14 +103,34 @@ setInterval(function() {
             notify: true
           }
         }
-      });
-      //LED1.write(true);
+      });      
+      
+      // Ensure readModeHi = true
+      if( !readModeHi && updatePossitionIntervalID != null )
+      {        
+        clearInterval(updatePossitionIntervalID);
+        updatePossitionIntervalID = setInterval(updatePossition, READ_INTERVAL_HI);     
+        readModeHi = true;        
+      } 
     }
     else{
-      //LED1.write(false);
+      inactiveCounter++;
+      if( inactiveCounter > INACTIVE_THRESHOLD ){
+        inactiveCounter = INACTIVE_THRESHOLD; // Avoid counter owerflow
+        // Reduce read interval (readModeHi = false)
+        if( readModeHi && updatePossitionIntervalID != null )
+        {          
+          clearInterval(updatePossitionIntervalID);
+          updatePossitionIntervalID = setInterval(updatePossition, READ_INTERVAL_LOW);     
+          readModeHi = false;           
+        }        
+      }      
     }
   }
-},20);
+}
+
+updatePossitionIntervalID = setInterval(updatePossition, READ_INTERVAL_HI);
+
 
 // Start after 1 s to let other things start first....
 setTimeout(function() {
