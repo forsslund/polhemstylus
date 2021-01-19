@@ -13,7 +13,10 @@ const pin_button = D31;
 const pin_white_to_sensor_clk = D27;
 const pin_dummy = D15; // Some unused pin
 
-const READ_INTERVAL_LOW = 1000;  // ms
+const READ_INTERVAL_LOW = 1000;  // ms OBS device will not go to sleep if there is a timer that
+                                 // will end within 1500 ms (according to 
+                                 // https://www.espruino.com/Power+Consumption,seems incorrect...)
+const READ_INTERVAL_DEEP_SLEEP = 10000;  // ms
 const READ_INTERVAL_HI  = 20;    // ms
 const INACTIVE_THRESHOLD= 1000;  // number of READ_INTERVAL_HI before going to low activity mode
 
@@ -63,36 +66,30 @@ getButtonState = function() {
 
 //var on = false;
 var inactiveCounter = 0;               // Keeps track of activity
-var updatePossitionIntervalID = null;  // Handle to intervall callback
 var readModeHi = true;
 function updatePossition()
- {
+{
+  var updateInterval=READ_INTERVAL_HI;
   if(start){
-//    // Need firmware 2v02. Might be good to only sample stylus pos while 
-//    // connected. And only update on changed value.+
-//    if( NRF.getSecurityStatus()=={connected:false} )
-//    {
-//      LED1.write(false);
-//    }
-//    else{
-//      // Blink for "alive"
-//      on = !on;
-//      LED1.write(on);
-//    }
-  
-    var preA=a;
-    var preB=b;
-    a = getRotation();
-    b = getButtonState();
     
-    // Only send data if new information
-    if( a!=preA || b!=preB )
+    var preA=a;
+    var preB=b;        
+    // Only sample possition if connected
+    if( NRF.getSecurityStatus().connected==true )
     {
-      inactiveCounter = 0; 
+      a = getRotation();
+    }
+    b = getButtonState();
+
+    // Only send data if new information
+    // else count up inactive counter
+    if( a!=preA || b!=preB )
+    {      
+      inactiveCounter = 0;
       
       // Pack message
-      StylusData[0] = a>>8;    
-      StylusData[1] = a - 256*StylusData[0];    
+      StylusData[0] = a>>8;
+      StylusData[1] = a - 256*StylusData[0];
 
       if(b) StylusData[0] = StylusData[0] + 128;
 
@@ -103,33 +100,26 @@ function updatePossition()
             notify: true
           }
         }
-      });      
-      
-      // Ensure readModeHi = true
-      if( !readModeHi && updatePossitionIntervalID != null )
-      {        
-        clearInterval(updatePossitionIntervalID);
-        updatePossitionIntervalID = setInterval(updatePossition, READ_INTERVAL_HI);     
-        readModeHi = true;        
-      } 
+      });
     }
     else{
       inactiveCounter++;
       if( inactiveCounter > INACTIVE_THRESHOLD ){
         inactiveCounter = INACTIVE_THRESHOLD; // Avoid counter owerflow
-        // Reduce read interval (readModeHi = false)
-        if( readModeHi && updatePossitionIntervalID != null )
-        {          
-          clearInterval(updatePossitionIntervalID);
-          updatePossitionIntervalID = setInterval(updatePossition, READ_INTERVAL_LOW);     
-          readModeHi = false;           
-        }        
-      }      
+        // Reduced read interval
+        if( NRF.getSecurityStatus().connected==true ){
+            updateInterval = READ_INTERVAL_LOW;
+        }
+        else{
+            updateInterval = READ_INTERVAL_DEEP_SLEEP;
+        }
+      }
     }
   }
+  setTimeout(updatePossition, updateInterval);
 }
 
-updatePossitionIntervalID = setInterval(updatePossition, READ_INTERVAL_HI);
+setTimeout(updatePossition, READ_INTERVAL_HI); // Initial call
 
 
 // Start after 1 s to let other things start first....
@@ -142,4 +132,7 @@ pinMode(pin_button, 'input_pullup');
 var b2 = function(state){
   LED2.write(!state.state);
 };
+
 setWatch(b2, pin_button, {repeat:true, edge:"both", debounce:"10"});
+setSleepIndicator(LED1);
+//setDeepSleep(1);
