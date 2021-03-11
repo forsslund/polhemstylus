@@ -29,21 +29,14 @@ struct StylusData {
 httplib::Client* pCli;
 
 fire_and_forget stylusValueHandler(GattCharacteristic c, GattValueChangedEventArgs const& v) {	
-	if (verbose) {
-		wcout << "Got: " << v.CharacteristicValue().Length() << " bytes: " << std::hex;
-		for (size_t i = 0; i < v.CharacteristicValue().Length(); i++) {
-			wcout << v.CharacteristicValue().data()[i] << " ";
-		}
-	}
-
 	StylusData s = {0};
 	s.button = (0x80 & v.CharacteristicValue().data()[0]) != 0;
 	s.rotation = (0x03 & v.CharacteristicValue().data()[0]) * 256 + v.CharacteristicValue().data()[1];
 	if (verbose) wcout << "\nRotation: "<< std::dec << s.rotation << (s.button ? " Button down" : " Button up") <<  "\n\n";
-	char getRequestString[80];
-	snprintf(getRequestString, 80, "/set?btn=%d&enc=%d", s.button ? 1 : 0, s.rotation);
+	std::ostringstream getRequestString;
+	getRequestString << "/set?btn=" << (s.button ? 1 : 0) << "&enc=" << s.rotation;
 	if(pCli!=NULL){
-		if (auto res = pCli->Get(getRequestString)) {
+		if (auto res = pCli->Get(getRequestString.str().c_str())) {
 			if(verbose){
 				if (res->status == 200) {
 					std::cout << res->body << std::endl;
@@ -56,38 +49,40 @@ fire_and_forget stylusValueHandler(GattCharacteristic c, GattValueChangedEventAr
 			std::cout << "HTTP COM ERROR\n";
 		}
 	}
-	else {
-		std::cout << "client gone\n";
-	}
-
+	
 	return winrt::fire_and_forget();
 }
 
 int main(int argc, char* argv[])
 {
 	init_apartment();
+	httplib::Client cli("localhost", 8080);
+	pCli = &cli;
 
 	uint64_t deviceAddress = 0;
 	if (argc == 2) {
+		try{
 		deviceAddress = stoll(argv[1], 0, 16);	// Convert adress string in hex format
+		wcout << "Connect to device with address 0x" << std::hex << deviceAddress << std::dec <<endl;
+		}
+		catch(...){
+			deviceAddress = 0;
+		}
 	}
 	if (argc != 1 && deviceAddress == 0) {
-		wcout << "Usage\t" << argv[1] << "\t\t" << "\t" << "Connect to deviceId (hex)" << endl
-			<< "\t" << argv[1] << " deviceId" << "\t" << "Connect to deviceId (hex)" << endl;
+		wcout << "Usage\t" << argv[0] << "\t" << " \t\t" << "Interactive device selection" << endl
+				   << "\t" << argv[0] << " deviceId" << "\t\t" << "Connect to device by deviceId (hex)" << endl;
 		return 1;
 	}
 
 	char userInput[3];
 	userInput[0] = '\0';
-	hstring devId;
+	hstring devId= L"";
 	if (deviceAddress == 0) {
+		// No adress given, prompt user
 		BLEdeviceFinder* pBleFinder = BLEdeviceFinder::getInstance();
-		devId = pBleFinder->PromptUserForDevice();
-		cout << "devId = pBleFinder->PromptUserForDevice(); = " << devId.c_str();
+		devId = pBleFinder->PromptUserForDevice();		
 	}
-
-	httplib::Client cli("localhost", 8080);
-	pCli = &cli;
 
 	if (devId != L"" || deviceAddress != 0) {
 		try {
@@ -111,12 +106,13 @@ int main(int argc, char* argv[])
 			wcout << endl
 				<< "Name: " << bleDev.Name().c_str() << endl
 				<< "Connection status:" << (bleDev.ConnectionStatus() == BluetoothConnectionStatus::Connected ? "Connected" : "Not Connected") << endl
-				<< "BluetoothAddress: " << std::hex << bleDev.BluetoothAddress() << endl
+				<< "BluetoothAddress: 0x" << std::hex << bleDev.BluetoothAddress() << endl
 				<< "DeviceAccessInformation: " << (uint16_t)bleDev.DeviceAccessInformation().CurrentStatus() << endl;
 
 			//
 			// Search device for the service we want
 			//
+			bool found = false;
 			auto gattServices{ bleDev.GetGattServicesAsync(BluetoothCacheMode::Uncached).get() };
 			for (GattDeviceService service : gattServices.Services()) {
 				GattCommunicationStatus gattCommunicationStatus = gattServices.Status();
@@ -136,10 +132,11 @@ int main(int argc, char* argv[])
 							wcout << "GetCharacteristicsForUuidAsync(stylusValueCharacteristic) got error code " << result.ErrorCode() << ".\n";
 						}
 						else if (result.get().Status() == GattCommunicationStatus::Success) {
+							found = true;
 							// Should only be one, but we get a vector, lets iterate						
 							for (GattCharacteristic c : result.get().Characteristics()) {
 								wcout << "Found matching GattCharacteristic " << to_hstring(c.Uuid()).c_str() << endl
-									<< "Press enter to start subscribing to notifications, press enter again to stop:\n";
+									  << "Press enter to start subscribing to notifications, press enter again to stop:\n";
 								cin.getline(userInput, 2);
 
 								//
@@ -151,14 +148,16 @@ int main(int argc, char* argv[])
 									cin.getline(userInput, 2);
 								}
 							}
-						}
-						else {
-							wcout << "Com error" << (int)result.GetResults().Status() << "\n";
-						}
-					}
+						}						
+					}		
 				}
 			}
 			bleDev.Close();
+			if(!found)
+			{
+				wcout << "Device not Polhem Stylus compatible." << endl;
+				return 1;
+			}
 		}
 		catch (...) {
 			wcout << "\nError or device connection lost.\n";
@@ -167,8 +166,7 @@ int main(int argc, char* argv[])
 	wcout << "Enter to quit";
 	cin.getline(userInput, 2);
 
-	pCli = NULL; // Indicate to any late threads taht the HTTP client is now invalid.
-
+	pCli = NULL; // Indicate to any late threads that the HTTP client is now invalid.
 	return 0;
 }
 
