@@ -22,56 +22,69 @@ constexpr guid stylusValueCharacteristic = { 0x90ad0001, 0x662b, 0x4504, { 0xb8,
 bool verbose = true;
 
 struct StylusData {
+private:
 	bool button;
 	uint16_t rotation;
+public:
+	StylusData() {
+		button = false;
+		rotation = 0;
+	}
+	//TODO: Make thread safe
+	bool GetButton() { return button;}
+	void SetButton(bool b) {button = b;}
+	uint16_t GetRotation() { return rotation; }
+	void SetRotation(uint16_t r) { rotation = r;  }
 };
 
-httplib::Client* pCli;
+StylusData stylusData;
 
-fire_and_forget stylusValueHandler(GattCharacteristic c, GattValueChangedEventArgs const& v) {	
-	StylusData s = {0};
-	s.button = (0x80 & v.CharacteristicValue().data()[0]) != 0;
-	s.rotation = (0x03 & v.CharacteristicValue().data()[0]) * 256 + v.CharacteristicValue().data()[1];
-	if (verbose) wcout << "\nRotation: "<< std::dec << s.rotation << (s.button ? " Button down" : " Button up") <<  "\n\n";
-	std::ostringstream getRequestString;
-	getRequestString << "/set?btn=" << (s.button ? 1 : 0) << "&enc=" << s.rotation;
-	if(pCli!=NULL){
-		if (auto res = pCli->Get(getRequestString.str().c_str())) {
-			if(verbose){
-				if (res->status == 200) {
-					std::cout << res->body << std::endl;
-					std::cout << "status200\n";
-				}		
-			}
-		}
-		else {
-			auto err = res.error();
-			std::cout << "HTTP COM ERROR\n";
-		}
-	}
-	
+fire_and_forget stylusValueHandler(GattCharacteristic c, GattValueChangedEventArgs const& v) {		
+	stylusData.SetButton( (0x80 & v.CharacteristicValue().data()[0]) != 0 );
+	stylusData.SetRotation( (0x03 & v.CharacteristicValue().data()[0]) * 256 + v.CharacteristicValue().data()[1] );
+	//if (verbose) wcout << "\nRotation: "<< std::dec << stylusData.GetRotation() << (stylusData.GetButton() ? " Button down" : " Button up") <<  "\n\n";
 	return winrt::fire_and_forget();
 }
 
+using namespace httplib;
+Server svr;
 int main(int argc, char* argv[])
 {
-	init_apartment();
-	httplib::Client cli("localhost", 8080);
-	pCli = &cli;
+	init_apartment();	
+	//httplib::Client cli("localhost", 8080);
+	//httplib::Client cli("http://localhost:8080/set");	
+	std::cout << "Ready to receive data over http. Example: http://localhost:8080/set?btn=1&enc=-123\n\n";
+	svr.Get("/hi", [](const httplib::Request&, httplib::Response& res) {
+		res.set_content("Hello World!", "text/plain");
+		});
+	svr.Get("/stylus1", [&](const Request& req, Response& res) {
+		std::ostringstream responce;
+		responce << "{\"button\":" << stylusData.GetButton() << "\"rotation\":" << stylusData.GetRotation() << "}";
+		res.set_content(responce.str().c_str(), "text/plain");
+		});
+	
 
 	uint64_t deviceAddress = 0;
-	if (argc == 2) {
+	string url;
+	if (argc == 3) {
+		// first arg is dev id
 		try{
-		deviceAddress = stoll(argv[1], 0, 16);	// Convert adress string in hex format
-		wcout << "Connect to device with address 0x" << std::hex << deviceAddress << std::dec <<endl;
+			deviceAddress = stoll(argv[1], 0, 16);	// Convert adress string in hex format
+			wcout << "Connect to device with address 0x" << std::hex << deviceAddress << std::dec << endl;
 		}
-		catch(...){
+		catch (...) {
 			deviceAddress = 0;
 		}
+
+		// second arg is URL
+		url = argv[2];
+
 	}
-	if (argc != 1 && deviceAddress == 0) {
-		wcout << "Usage\t" << argv[0] << "\t" << " \t\t" << "Interactive device selection" << endl
-				   << "\t" << argv[0] << " deviceId" << "\t\t" << "Connect to device by deviceId (hex)" << endl;
+
+	if (argc !=1 && deviceAddress == 0) {
+		wcout << "Usage\t" << argv[0] << "\t" << "\t\t\t" << "Interactive device selection and test connection" << endl
+			<< "\t" << argv[0] << " deviceId url" << "\t\t" << "Connect to device by deviceId (hex) and send to url" << endl << endl
+			<< "Example\t" << argv[0] << " 0xc56154495792 http://localhost:8080/set" << "\t\t" << endl;
 		return 1;
 	}
 
@@ -113,7 +126,8 @@ int main(int argc, char* argv[])
 			// Search device for the service we want
 			//
 			bool found = false;
-			auto gattServices{ bleDev.GetGattServicesAsync(BluetoothCacheMode::Uncached).get() };
+			GattCharacteristic selectedCharacteristic = nullptr;
+			auto gattServices{ bleDev.GetGattServicesAsync(BluetoothCacheMode::Uncached).get() };						
 			for (GattDeviceService service : gattServices.Services()) {
 				GattCommunicationStatus gattCommunicationStatus = gattServices.Status();
 				if (gattCommunicationStatus == GattCommunicationStatus::Success) {
@@ -133,40 +147,38 @@ int main(int argc, char* argv[])
 						}
 						else if (result.get().Status() == GattCommunicationStatus::Success) {
 							found = true;
-							// Should only be one, but we get a vector, lets iterate						
-							for (GattCharacteristic c : result.get().Characteristics()) {
-								wcout << "Found matching GattCharacteristic " << to_hstring(c.Uuid()).c_str() << endl
-									  << "Press enter to start subscribing to notifications, press enter again to stop:\n";
-								cin.getline(userInput, 2);
-
+							selectedCharacteristic = result.get().Characteristics().GetAt(0);
+							if(selectedCharacteristic!=nullptr){
+								wcout << "Found matching GattCharacteristic " << to_hstring(selectedCharacteristic.Uuid()).c_str() << endl;
 								//
 								// Check that characteristic is writable. Themn write to it to tell the dev that we want notifications								
 								//
-								if (GattCharacteristicProperties::None != (c.CharacteristicProperties() & GattCharacteristicProperties::Notify)) {
-									event_token t = c.ValueChanged(stylusValueHandler);
-									c.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify);
-									cin.getline(userInput, 2);
+								if (GattCharacteristicProperties::None != (selectedCharacteristic.CharacteristicProperties() & GattCharacteristicProperties::Notify)) {
+									event_token t = selectedCharacteristic.ValueChanged(stylusValueHandler);
+									selectedCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify);									
 								}
 							}
-						}						
+						}
 					}		
 				}
-			}
-			bleDev.Close();
+			}			
 			if(!found)
 			{
 				wcout << "Device not Polhem Stylus compatible." << endl;
 				return 1;
 			}
+			wcout << "Starting server";
+			svr.listen("0.0.0.0", 8181);					
+			//wcout << "Enter to quit";
+			//cin.getline(userInput, 2);
+			wcout << "Closing BLE...";			
+			bleDev.Close();
 		}
 		catch (...) {
 			wcout << "\nError or device connection lost.\n";
 		}
 	}
-	wcout << "Enter to quit";
-	cin.getline(userInput, 2);
-
-	pCli = NULL; // Indicate to any late threads that the HTTP client is now invalid.
+			
 	return 0;
 }
 
