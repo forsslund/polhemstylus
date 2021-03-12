@@ -6,6 +6,8 @@
 using namespace winrt;
 using namespace Windows::Foundation;
 
+using namespace winrt::Windows::Networking::Sockets;
+
 BLEdeviceFinder* BLEdeviceFinder::instance = 0;
 
 #include <iostream>
@@ -25,12 +27,15 @@ struct StylusData {
 private:
 	bool button;
 	uint16_t rotation;
+	uint16_t raw;
 public:
 	StylusData() {
 		button = false;
 		rotation = 0;
 	}
 	//TODO: Make thread safe
+	void SetRaw(uint16_t r) { raw = r; }
+	uint16_t GetRaw() { return raw; }
 	bool GetButton() { return button;}
 	void SetButton(bool b) {button = b;}
 	uint16_t GetRotation() { return rotation; }
@@ -40,6 +45,7 @@ public:
 StylusData stylusData;
 
 fire_and_forget stylusValueHandler(GattCharacteristic c, GattValueChangedEventArgs const& v) {		
+	stylusData.SetRaw( *(uint16_t*)(&v.CharacteristicValue().data()[0]) );
 	stylusData.SetButton( (0x80 & v.CharacteristicValue().data()[0]) != 0 );
 	stylusData.SetRotation( (0x03 & v.CharacteristicValue().data()[0]) * 256 + v.CharacteristicValue().data()[1] );
 	//if (verbose) wcout << "\nRotation: "<< std::dec << stylusData.GetRotation() << (stylusData.GetButton() ? " Button down" : " Button up") <<  "\n\n";
@@ -50,19 +56,26 @@ using namespace httplib;
 Server svr;
 int main(int argc, char* argv[])
 {
-	init_apartment();	
-	//httplib::Client cli("localhost", 8080);
-	//httplib::Client cli("http://localhost:8080/set");	
-	std::cout << "Ready to receive data over http. Example: http://localhost:8080/set?btn=1&enc=-123\n\n";
+	init_apartment();
+
 	svr.Get("/hi", [](const httplib::Request&, httplib::Response& res) {
 		res.set_content("Hello World!", "text/plain");
 		});
-	svr.Get("/stylus1", [&](const Request& req, Response& res) {
+	svr.Get("/stylus1.json", [&](const Request& req, Response& res) {
 		std::ostringstream responce;
-		responce << "{\"button\":" << stylusData.GetButton() << "\"rotation\":" << stylusData.GetRotation() << "}";
+		responce << "{\"button\":" << stylusData.GetButton() << ", \"rotation\":" << stylusData.GetRotation() << "}";
 		res.set_content(responce.str().c_str(), "text/plain");
 		});
-	
+	svr.Get("/raw1", [&](const Request& req, Response& res) {
+		std::ostringstream responce;
+		responce << stylusData.GetRaw();
+		res.set_content(responce.str().c_str(), "text/plain");
+		});
+	svr.Get("/stylus1", [&](const Request& req, Response& res) {
+		std::ostringstream responce;
+		responce << stylusData.GetButton() << " " << stylusData.GetRotation();
+		res.set_content(responce.str().c_str(), "text/plain");
+		});
 
 	uint64_t deviceAddress = 0;
 	string url;
@@ -120,7 +133,7 @@ int main(int argc, char* argv[])
 				<< "Name: " << bleDev.Name().c_str() << endl
 				<< "Connection status:" << (bleDev.ConnectionStatus() == BluetoothConnectionStatus::Connected ? "Connected" : "Not Connected") << endl
 				<< "BluetoothAddress: 0x" << std::hex << bleDev.BluetoothAddress() << endl
-				<< "DeviceAccessInformation: " << (uint16_t)bleDev.DeviceAccessInformation().CurrentStatus() << endl;
+				<< "DeviceAccessInformation: " << (uint16_t)bleDev.DeviceAccessInformation().CurrentStatus() << endl<<endl;
 
 			//
 			// Search device for the service we want
@@ -149,7 +162,7 @@ int main(int argc, char* argv[])
 							found = true;
 							selectedCharacteristic = result.get().Characteristics().GetAt(0);
 							if(selectedCharacteristic!=nullptr){
-								wcout << "Found matching GattCharacteristic " << to_hstring(selectedCharacteristic.Uuid()).c_str() << endl;
+								wcout << "Polhem Stylus characteristic " << to_hstring(selectedCharacteristic.Uuid()).c_str() << " found." << endl;
 								//
 								// Check that characteristic is writable. Themn write to it to tell the dev that we want notifications								
 								//
@@ -167,10 +180,10 @@ int main(int argc, char* argv[])
 				wcout << "Device not Polhem Stylus compatible." << endl;
 				return 1;
 			}
-			wcout << "Starting server";
+			wcout << "Server started at " << endl;
+			wcout << "Press ctrl-c to quit." << endl;
 			svr.listen("0.0.0.0", 8181);					
-			//wcout << "Enter to quit";
-			//cin.getline(userInput, 2);
+
 			wcout << "Closing BLE...";			
 			bleDev.Close();
 		}
