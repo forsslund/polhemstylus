@@ -3,6 +3,8 @@
 #include "winrt/Windows.Devices.Bluetooth.GenericAttributeProfile.h"
 #include "winrt/Windows.Storage.Streams.h"
 #include "external/httplib.h"
+#include "socketServer.h"
+
 using namespace winrt;
 using namespace Windows::Foundation;
 
@@ -168,9 +170,10 @@ int main(int argc, char* argv[])
 				return 1;
 			}
 			wcout << "Starting server";
-			svr.listen("0.0.0.0", 8181);					
-			//wcout << "Enter to quit";
-			//cin.getline(userInput, 2);
+			std::thread srv(socketServer);
+			//svr.listen("0.0.0.0", 8181);					
+			wcout << "Enter to quit";
+			cin.getline(userInput, 2);
 			wcout << "Closing BLE...";			
 			bleDev.Close();
 		}
