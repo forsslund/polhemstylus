@@ -17,124 +17,129 @@ using ssize_t = __int64;
 #endif
 
 #define BUF_SIZE 10 
-void socketServer() {
+#include <mutex>
+#include "socketServer.h"
 
+	bool SocketServer::Start() {
+		if (isRunning) return true;
+		int iResult;
 
-	// All processes (applications or DLLs) that call Winsock functions must initialize the use of the Windows Sockets DLL before making other Winsock functions calls. This also makes certain that Winsock is supported on the system.
-	WSADATA wsaData;
-	int iResult;
+		// Initialize Winsock
+		iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+		if (iResult != 0) {
+			printf("WSAStartup failed: %d\n", iResult);
+			return true;
+		}
 
-	// Initialize Winsock
-	iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-	if (iResult != 0) {
-		printf("WSAStartup failed: %d\n", iResult);
-		return ;
-	}
-	//std::string path = Path.GetTempPath();
-	struct sockaddr_un svaddr, claddr;
-	int j;
-	SOCKET listenSocket = INVALID_SOCKET;
-	ssize_t numBytes;
-	socklen_t len;
-	char buf[BUF_SIZE];
-	
-	listenSocket = socket(AF_UNIX, SOCK_STREAM, 0);       /* Create server socket */
-	if (listenSocket == INVALID_SOCKET) {
-		WSACleanup();
-		errExit("socket");
-	}
+		listenSocket = socket(AF_UNIX, SOCK_STREAM, 0);       /* Create server socket */
+		if (listenSocket == INVALID_SOCKET) {
+			WSACleanup();
+			return true;
+		}
+
+		// Make sure adress is ok
+		if (remove(SV_SOCK_PATH) == -1 && errno != ENOENT) {
+			return true;
+		}
+
+		// Create adress structure
+		struct sockaddr_un svaddr;
+		memset(&svaddr, 0, sizeof(struct sockaddr_un));
+		svaddr.sun_family = AF_UNIX;
+		strncpy(svaddr.sun_path, SV_SOCK_PATH, sizeof(svaddr.sun_path) - 1);
+
+		// Bind adress
+		if (::bind(listenSocket, (struct sockaddr*)&svaddr, sizeof(struct sockaddr_un)) == -1)
+			errExit("bind");
 		
+		// Now, fire up a thread to take care of incomming connections
+		listenThread = std::thread(&SocketServer::Listen, this);
 
+		isRunning = true;
+		return false;	// No error
+	}
 
-	timeval read_timeout;
-	read_timeout.tv_sec = 0;
-	read_timeout.tv_usec = 5000; // wait for messages 5ms, then check if thread should quit
-	setsockopt(listenSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&read_timeout, sizeof read_timeout);
+	bool SocketServer::Shutdown() {
+		stopServer = true;
+		return false;
+	}
 
+	bool SocketServer::Send(int value) {
+		const std::lock_guard<std::mutex> lock(activeConnections_mutex);
+		auto i = activeConnections.begin();
+		while (i != activeConnections.end()) {
+			int result = send(*i, (char*)&value, sizeof(value), 0);
+			if (result < 0) {
+				// Inactive or broken connection, close and remove
+				closesocket(*i);
+				i = activeConnections.erase(i);
+			}
+			else {
+				i++;
+			}
+		}
+		return false;
+	}
 
-	/* Construct well-known address and bind server socket to it */
+	bool SocketServer::Send(std::string str)
+	{
+		const std::lock_guard<std::mutex> lock(activeConnections_mutex);
+		auto i = activeConnections.begin();
+		while (i != activeConnections.end()) {
+			int result = send(*i, str.c_str(), str.length(), 0);
+			if (result < 0) {
+				// Inactive or broken connection, close and remove
+				closesocket(*i);
+				i = activeConnections.erase(i);
+			}
+			else {
+				i++;
+			}
+		}		
+		return false;
+	}
 
-	if (remove(SV_SOCK_PATH) == -1 && errno != ENOENT)
-		errExit("remove");
+	void SocketServer::Listen() {
+		printf("\nIn listening thread\n");
+		isRunning = true;
+		int rval = 0;
+		SOCKET messageSocket = INVALID_SOCKET;
 
-	memset(&svaddr, 0, sizeof(struct sockaddr_un));
-	svaddr.sun_family = AF_UNIX;
-	strncpy(svaddr.sun_path, SV_SOCK_PATH, sizeof(svaddr.sun_path) - 1);
+		printf("Starting socket server \n");
+		listen(listenSocket, 5);
+		while(!stopServer)
+		{			
+			//
+			// Check if there is a connection waiting
+			//
+			fd_set set;
+			FD_ZERO(&set); // clear the set
+			FD_SET(listenSocket, &set);
+			struct timeval timeout;			
+			timeout.tv_sec = 1;
+			timeout.tv_usec = 0;
+			int rv = select(1, &set, NULL, NULL, &timeout);	// Any waiting connection?
 
-	if (::bind(listenSocket, (struct sockaddr*)&svaddr, sizeof(struct sockaddr_un)) == -1)
-		errExit("bind");
-
-	
-	
-	//aklsdjf
-	int rval=0;
-	int messageSocket = INVALID_SOCKET;
-	printf("Starting socket server \n");
-	listen(listenSocket, 5);
-	do {
-		    messageSocket = accept(listenSocket, 0, 0);	// Blocks untill we have a connection
-		    if (messageSocket == -1)
-		        perror("accept");
-		    else do {
-				memset(buf, 0, sizeof(buf));
-				rval = recv(messageSocket, buf, BUF_SIZE,0);	//  If no messages are available at the socket, the receive calls wait for a message to arrive
-		        if( rval < 0)
-		            perror("reading stream message");
-		        else if (rval == 0)
-		            printf("Ending connection\n");
-				else
-				{
-					printf("Connected: -->%s\n", buf);
-					do {
-						
-
-					}while
-					int valueToSend = 42;
-					send(messageSocket, (char*)&valueToSend, sizeof(valueToSend), 0);
+			if (rv > 0) {
+				// Waiting connection, accept it to a new socket and store
+				messageSocket = accept(listenSocket, 0, 0);	// Blocks untill we have a connection
+				if (messageSocket != INVALID_SOCKET) {
+					const std::lock_guard<std::mutex> lock(activeConnections_mutex);
+					activeConnections.push_back(messageSocket);	// Store the socket
 				}
-		            
-		
-			} while (rval > 0);
-			closesocket(messageSocket);
-	} while (messageSocket != -1);
-	// cleanup
-	closesocket(listenSocket);
-	WSACleanup();
-	//asdklf
-	
-	/* Receive messages, convert to uppercase, and return to client */
+			}			
+		}
 
-/*	while (1) {
-		
-		len = sizeof(struct sockaddr_un);
-		numBytes = recvfrom(listenSocket, buf, BUF_SIZE, 0,
-			(struct sockaddr*)&claddr, &len);
-		if (numBytes == -1)
-			continue; // (timeout)           errExit("recvfrom");
+		// close all connections
+		const std::lock_guard<std::mutex> lock(activeConnections_mutex);
+		for (SOCKET a : activeConnections) {
+			shutdown(a, 0);
+			closesocket(a);
+		}
+		activeConnections.clear();
 
-		//printf("Server received %ld bytes from %s\n", (long) numBytes, claddr.sun_path);
-		
-
-		numBytes = 2;
-
-		for (j = 0; j < numBytes; j++)
-			printf("%c ",buf[j]);
-		int valueToSend = 42;*/
-		//send(listenSocket, (char*) &valueToSend, sizeof(valueToSend), 0);
-		//if (sendto(sfd, buf, numBytes, 0, (struct sockaddr*)&claddr, len) !=
-		//	numBytes)
-		//	fatal("sendto");
-
-
-		/*
-		if(prev_bt_data[0]!=bt_data[0] || prev_bt_data[1]!=bt_data[1] ){
-			   prev_bt_data[0]=bt_data[0];
-			   prev_bt_data[1]=bt_data[1];
-
-			   printf("Got new data in main loop: %02x %02x\n",bt_data[0],bt_data[1]);
-		   }
-		   */
-		   //newSocketRequest = true;
-	
-	printf("Socket server quit.\n");
-}
+		shutdown(listenSocket, 0);
+		closesocket(listenSocket);
+		WSACleanup();
+		isRunning = false;
+	}

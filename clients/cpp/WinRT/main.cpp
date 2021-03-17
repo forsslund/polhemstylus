@@ -40,19 +40,30 @@ public:
 };
 
 StylusData stylusData;
+SocketServer server;
 
 fire_and_forget stylusValueHandler(GattCharacteristic c, GattValueChangedEventArgs const& v) {		
 	stylusData.SetButton( (0x80 & v.CharacteristicValue().data()[0]) != 0 );
 	stylusData.SetRotation( (0x03 & v.CharacteristicValue().data()[0]) * 256 + v.CharacteristicValue().data()[1] );
+	std:ostringstream str;
+	str << std::dec << stylusData.GetRotation() << " " << stylusData.GetButton();
+	server.Send(str.str() );
 	//if (verbose) wcout << "\nRotation: "<< std::dec << stylusData.GetRotation() << (stylusData.GetButton() ? " Button down" : " Button up") <<  "\n\n";
 	return winrt::fire_and_forget();
 }
+
 
 using namespace httplib;
 Server svr;
 int main(int argc, char* argv[])
 {
 	init_apartment();	
+
+
+	
+	server.Start();
+
+
 	//httplib::Client cli("localhost", 8080);
 	//httplib::Client cli("http://localhost:8080/set");	
 	std::cout << "Ready to receive data over http. Example: http://localhost:8080/set?btn=1&enc=-123\n\n";
@@ -170,12 +181,15 @@ int main(int argc, char* argv[])
 				return 1;
 			}
 			wcout << "Starting server";
-			std::thread srv(socketServer);
-			//svr.listen("0.0.0.0", 8181);					
+			//std::thread srv(socketServer);
+			//svr.listen("0.0.0.0", 8181);
+
 			wcout << "Enter to quit";
 			cin.getline(userInput, 2);
+			server.Shutdown();
 			wcout << "Closing BLE...";			
 			bleDev.Close();
+		
 		}
 		catch (...) {
 			wcout << "\nError or device connection lost.\n";
