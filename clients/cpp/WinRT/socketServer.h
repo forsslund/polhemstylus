@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 class SocketServer {
 public:
 	SocketServer() : listenThread() //Default threadummy
@@ -11,14 +13,14 @@ public:
 		if (listenThread.joinable()) listenThread.join();
 	}
 
-	bool Start();
+	bool Start(std::string socketPath);
 	bool Shutdown();
-	bool Send(int value);
+	bool Send(uint16_t value);
 	bool Send(std::string str);
 private:
 	void Listen();
 	bool isRunning = false;
-	WSADATA wsaData;
+	WSADATA wsaData{0};
 	bool stopServer = false;
 	SOCKET listenSocket = INVALID_SOCKET;
 	std::list<SOCKET> activeConnections;

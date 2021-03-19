@@ -15,70 +15,26 @@ using namespace Windows::Storage::Streams;
 using namespace Windows::Devices::Bluetooth;
 using namespace Windows::Devices::Bluetooth::GenericAttributeProfile;
 using namespace Windows::Devices::Enumeration;
-//#include "helpers.h"
-//using namespace helpers;
 
 constexpr guid stylusService			 = { 0x90ad0000, 0x662b, 0x4504, { 0xb8, 0x40, 0x0f, 0xf1, 0xdd, 0x28, 0xd8, 0x4e } };
 constexpr guid stylusValueCharacteristic = { 0x90ad0001, 0x662b, 0x4504, { 0xb8, 0x40, 0x0f, 0xf1, 0xdd, 0x28, 0xd8, 0x4e } };
 
 bool verbose = true;
 
-struct StylusData {
-private:
-	bool button;
-	uint16_t rotation;
-public:
-	StylusData() {
-		button = false;
-		rotation = 0;
-	}
-	//TODO: Make thread safe
-	bool GetButton() { return button;}
-	void SetButton(bool b) {button = b;}
-	uint16_t GetRotation() { return rotation; }
-	void SetRotation(uint16_t r) { rotation = r;  }
-};
-
-StylusData stylusData;
 SocketServer server;
 
 fire_and_forget stylusValueHandler(GattCharacteristic c, GattValueChangedEventArgs const& v) {		
-	stylusData.SetButton( (0x80 & v.CharacteristicValue().data()[0]) != 0 );
-	stylusData.SetRotation( (0x03 & v.CharacteristicValue().data()[0]) * 256 + v.CharacteristicValue().data()[1] );
-	std:ostringstream str;
-	str << std::dec << stylusData.GetRotation() << " " << stylusData.GetButton();
-	server.Send(str.str() );
-	//if (verbose) wcout << "\nRotation: "<< std::dec << stylusData.GetRotation() << (stylusData.GetButton() ? " Button down" : " Button up") <<  "\n\n";
+	uint16_t data = *((uint16_t*) &v.CharacteristicValue().data()[0]);
+	server.Send(data);	
 	return winrt::fire_and_forget();
 }
 
 
-using namespace httplib;
-Server svr;
 int main(int argc, char* argv[])
 {
 	init_apartment();	
-
-
-	
-	server.Start();
-
-
-	//httplib::Client cli("localhost", 8080);
-	//httplib::Client cli("http://localhost:8080/set");	
-	std::cout << "Ready to receive data over http. Example: http://localhost:8080/set?btn=1&enc=-123\n\n";
-	svr.Get("/hi", [](const httplib::Request&, httplib::Response& res) {
-		res.set_content("Hello World!", "text/plain");
-		});
-	svr.Get("/stylus1", [&](const Request& req, Response& res) {
-		std::ostringstream responce;
-		responce << "{\"button\":" << stylusData.GetButton() << "\"rotation\":" << stylusData.GetRotation() << "}";
-		res.set_content(responce.str().c_str(), "text/plain");
-		});
-	
-
 	uint64_t deviceAddress = 0;
-	string url;
+	string url = "/dev/stylus1";
 	if (argc == 3) {
 		// first arg is dev id
 		try{
@@ -180,9 +136,8 @@ int main(int argc, char* argv[])
 				wcout << "Device not Polhem Stylus compatible." << endl;
 				return 1;
 			}
-			wcout << "Starting server";
-			//std::thread srv(socketServer);
-			//svr.listen("0.0.0.0", 8181);
+			wcout << "Starting server\n";
+			server.Start(url);
 
 			wcout << "Enter to quit";
 			cin.getline(userInput, 2);

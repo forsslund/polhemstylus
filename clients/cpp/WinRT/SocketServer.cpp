@@ -4,10 +4,6 @@
 #include <WS2tcpip.h>
 #include < afunix.h >
 
-#define UNIX_PATH_MAX 108
-//#define SV_SOCK_PATH "/tmp/ud_ucase"
-//#define SV_SOCK_PATH "server.sock"
-#define SV_SOCK_PATH "/temp/gnu"
 void errExit(const char* str) { printf("%s", str); exit(1); }
 void fatal(const char* str) { printf("%s", str);  exit(1); }
 void usageErr(const char* str) { printf("%s", str); exit(1); }
@@ -20,7 +16,7 @@ using ssize_t = __int64;
 #include <mutex>
 #include "socketServer.h"
 
-	bool SocketServer::Start() {
+	bool SocketServer::Start(std::string socketPath) {
 		if (isRunning) return true;
 		int iResult;
 
@@ -38,7 +34,7 @@ using ssize_t = __int64;
 		}
 
 		// Make sure adress is ok
-		if (remove(SV_SOCK_PATH) == -1 && errno != ENOENT) {
+		if ( remove( socketPath.c_str() ) == -1 && errno != ENOENT) {
 			return true;
 		}
 
@@ -46,7 +42,7 @@ using ssize_t = __int64;
 		struct sockaddr_un svaddr;
 		memset(&svaddr, 0, sizeof(struct sockaddr_un));
 		svaddr.sun_family = AF_UNIX;
-		strncpy(svaddr.sun_path, SV_SOCK_PATH, sizeof(svaddr.sun_path) - 1);
+		strncpy_s(svaddr.sun_path, socketPath.c_str(), sizeof(svaddr.sun_path) - 1);
 
 		// Bind adress
 		if (::bind(listenSocket, (struct sockaddr*)&svaddr, sizeof(struct sockaddr_un)) == -1)
@@ -64,7 +60,7 @@ using ssize_t = __int64;
 		return false;
 	}
 
-	bool SocketServer::Send(int value) {
+	bool SocketServer::Send(uint16_t value) {
 		const std::lock_guard<std::mutex> lock(activeConnections_mutex);
 		auto i = activeConnections.begin();
 		while (i != activeConnections.end()) {
@@ -86,7 +82,7 @@ using ssize_t = __int64;
 		const std::lock_guard<std::mutex> lock(activeConnections_mutex);
 		auto i = activeConnections.begin();
 		while (i != activeConnections.end()) {
-			int result = send(*i, str.c_str(), str.length(), 0);
+			int result = send(*i, str.c_str(), (int)str.length(), 0);
 			if (result < 0) {
 				// Inactive or broken connection, close and remove
 				closesocket(*i);
@@ -116,9 +112,9 @@ using ssize_t = __int64;
 			FD_ZERO(&set); // clear the set
 			FD_SET(listenSocket, &set);
 			struct timeval timeout;			
-			timeout.tv_sec = 1;
+			timeout.tv_sec = 2;
 			timeout.tv_usec = 0;
-			int rv = select(1, &set, NULL, NULL, &timeout);	// Any waiting connection?
+			int rv = select(1, &set, NULL, NULL, &timeout);	// Any waiting connection? Timeout after 2 sec and recheck
 
 			if (rv > 0) {
 				// Waiting connection, accept it to a new socket and store
@@ -126,6 +122,7 @@ using ssize_t = __int64;
 				if (messageSocket != INVALID_SOCKET) {
 					const std::lock_guard<std::mutex> lock(activeConnections_mutex);
 					activeConnections.push_back(messageSocket);	// Store the socket
+					printf("Client connected!\n");
 				}
 			}			
 		}
