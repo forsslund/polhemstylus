@@ -5,12 +5,13 @@
 
 
 #ifdef _WIN64
-    #include <winrt/Windows.Foundation.h>
-    #include <winrt/Windows.Foundation.Collections.h>
-    #include "SocketClient.h"
 
-    #include <winsock2.h>    
-    #include <afunix.h>
+ //   #include <winrt/Windows.Foundation.h>
+ // #include <winrt/Windows.Foundation.Collections.h>
+   #include "SocketClient.h"
+
+   // #include <winsock2.h>    
+    //#include <afunix.h>
     #pragma comment(lib,"ws2_32.lib")
 #else
     #include <sys/un.h>
@@ -27,7 +28,7 @@
 int main(int argc, char* argv[])
 {
     SocketClient<uint16_t> myClient;
-    myClient.Start("/dev/stylus1");
+    myClient.Start("/dev/stylus-COM4");
     
     uint16_t value = 0;
     for(int i=0;i<100;i++){
