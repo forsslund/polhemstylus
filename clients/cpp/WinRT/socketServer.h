@@ -2,6 +2,10 @@
 
 #include <stdint.h>
 
+#include <winsock2.h>
+#include <afunix.h>
+#include <mutex>
+
 class SocketServer {
 public:
 	SocketServer() : listenThread() //Default threadummy

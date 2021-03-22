@@ -2,7 +2,6 @@
 #include "BLEdeviceFinder.h"
 #include "winrt/Windows.Devices.Bluetooth.GenericAttributeProfile.h"
 #include "winrt/Windows.Storage.Streams.h"
-#include "external/httplib.h"
 #include "socketServer.h"
 
 using namespace winrt;
@@ -120,7 +119,7 @@ int main(int argc, char* argv[])
 							if(selectedCharacteristic!=nullptr){
 								wcout << "Found matching GattCharacteristic " << to_hstring(selectedCharacteristic.Uuid()).c_str() << endl;
 								//
-								// Check that characteristic is writable. Themn write to it to tell the dev that we want notifications								
+								// Check that characteristic is writable. Then write to it to tell the dev that we want notifications								
 								//
 								if (GattCharacteristicProperties::None != (selectedCharacteristic.CharacteristicProperties() & GattCharacteristicProperties::Notify)) {
 									event_token t = selectedCharacteristic.ValueChanged(stylusValueHandler);
@@ -136,7 +135,7 @@ int main(int argc, char* argv[])
 				wcout << "Device not Polhem Stylus compatible." << endl;
 				return 1;
 			}
-			wcout << "Starting server\n";
+			wcout << "Starting server "<< url.c_str() <<endl;
 			server.Start(url);
 
 			wcout << "Enter to quit";

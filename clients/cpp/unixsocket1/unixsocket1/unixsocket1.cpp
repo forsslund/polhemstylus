@@ -9,8 +9,7 @@
     #include <winrt/Windows.Foundation.Collections.h>
     #include "SocketClient.h"
 
-    #include <winsock2.h>
-    #include <WS2tcpip.h>
+    #include <winsock2.h>    
     #include <afunix.h>
     #pragma comment(lib,"ws2_32.lib")
 #else

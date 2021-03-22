@@ -1,6 +1,5 @@
 #pragma once
 #include <winsock2.h>
-#include <WS2tcpip.h>
 #include <afunix.h>
 #include <list>
 #include <thread>
@@ -101,7 +100,7 @@ void SocketClient<T>::Listen() {
 					if (byteCounter == dataSize) {
 						// Atomically store data
 						const std::lock_guard<std::mutex> lock(dataMutex);
-						memcpy((void*)&data, dataBuffer, sizeof(data));
+						memcpy((void*)&data, dataBuffer, sizeof(data));						
 					}
 				}
 			}
