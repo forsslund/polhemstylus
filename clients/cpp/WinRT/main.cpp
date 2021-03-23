@@ -2,7 +2,8 @@
 #include "BLEdeviceFinder.h"
 #include "winrt/Windows.Devices.Bluetooth.GenericAttributeProfile.h"
 #include "winrt/Windows.Storage.Streams.h"
-#include "external/httplib.h"
+#include "socketServer.h"
+
 using namespace winrt;
 using namespace Windows::Foundation;
 
@@ -13,65 +14,45 @@ using namespace Windows::Storage::Streams;
 using namespace Windows::Devices::Bluetooth;
 using namespace Windows::Devices::Bluetooth::GenericAttributeProfile;
 using namespace Windows::Devices::Enumeration;
-//#include "helpers.h"
-//using namespace helpers;
 
 constexpr guid stylusService			 = { 0x90ad0000, 0x662b, 0x4504, { 0xb8, 0x40, 0x0f, 0xf1, 0xdd, 0x28, 0xd8, 0x4e } };
 constexpr guid stylusValueCharacteristic = { 0x90ad0001, 0x662b, 0x4504, { 0xb8, 0x40, 0x0f, 0xf1, 0xdd, 0x28, 0xd8, 0x4e } };
 
 bool verbose = true;
 
-struct StylusData {
-	bool button;
-	uint16_t rotation;
-};
+SocketServer server;
 
-httplib::Client* pCli;
-
-fire_and_forget stylusValueHandler(GattCharacteristic c, GattValueChangedEventArgs const& v) {	
-	StylusData s = {0};
-	s.button = (0x80 & v.CharacteristicValue().data()[0]) != 0;
-	s.rotation = (0x03 & v.CharacteristicValue().data()[0]) * 256 + v.CharacteristicValue().data()[1];
-	if (verbose) wcout << "\nRotation: "<< std::dec << s.rotation << (s.button ? " Button down" : " Button up") <<  "\n\n";
-	std::ostringstream getRequestString;
-	getRequestString << "/set?btn=" << (s.button ? 1 : 0) << "&enc=" << s.rotation;
-	if(pCli!=NULL){
-		if (auto res = pCli->Get(getRequestString.str().c_str())) {
-			if(verbose){
-				if (res->status == 200) {
-					std::cout << res->body << std::endl;
-					std::cout << "status200\n";
-				}		
-			}
-		}
-		else {
-			auto err = res.error();
-			std::cout << "HTTP COM ERROR\n";
-		}
-	}
-	
+fire_and_forget stylusValueHandler(GattCharacteristic c, GattValueChangedEventArgs const& v) {		
+	uint16_t data = *((uint16_t*) &v.CharacteristicValue().data()[0]);
+	server.Send(data);	
 	return winrt::fire_and_forget();
 }
 
+
 int main(int argc, char* argv[])
 {
-	init_apartment();
-	httplib::Client cli("localhost", 8080);
-	pCli = &cli;
-
+	init_apartment();	
 	uint64_t deviceAddress = 0;
-	if (argc == 2) {
+	string url = "/dev/stylus1";
+	if (argc == 3) {
+		// first arg is dev id
 		try{
-		deviceAddress = stoll(argv[1], 0, 16);	// Convert adress string in hex format
-		wcout << "Connect to device with address 0x" << std::hex << deviceAddress << std::dec <<endl;
+			deviceAddress = stoll(argv[1], 0, 16);	// Convert adress string in hex format
+			wcout << "Connect to device with address 0x" << std::hex << deviceAddress << std::dec << endl;
 		}
-		catch(...){
+		catch (...) {
 			deviceAddress = 0;
 		}
+
+		// second arg is URL
+		url = argv[2];
+
 	}
-	if (argc != 1 && deviceAddress == 0) {
-		wcout << "Usage\t" << argv[0] << "\t" << " \t\t" << "Interactive device selection" << endl
-				   << "\t" << argv[0] << " deviceId" << "\t\t" << "Connect to device by deviceId (hex)" << endl;
+
+	if (argc !=1 && deviceAddress == 0) {
+		wcout << "Usage\t" << argv[0] << "\t" << "\t\t\t" << "Interactive device selection and test connection" << endl
+			<< "\t" << argv[0] << " deviceId url" << "\t\t" << "Connect to device by deviceId (hex) and send to url" << endl << endl
+			<< "Example\t" << argv[0] << " 0xc56154495792 http://localhost:8080/set" << "\t\t" << endl;
 		return 1;
 	}
 
@@ -113,7 +94,8 @@ int main(int argc, char* argv[])
 			// Search device for the service we want
 			//
 			bool found = false;
-			auto gattServices{ bleDev.GetGattServicesAsync(BluetoothCacheMode::Uncached).get() };
+			GattCharacteristic selectedCharacteristic = nullptr;
+			auto gattServices{ bleDev.GetGattServicesAsync(BluetoothCacheMode::Uncached).get() };						
 			for (GattDeviceService service : gattServices.Services()) {
 				GattCommunicationStatus gattCommunicationStatus = gattServices.Status();
 				if (gattCommunicationStatus == GattCommunicationStatus::Success) {
@@ -133,40 +115,41 @@ int main(int argc, char* argv[])
 						}
 						else if (result.get().Status() == GattCommunicationStatus::Success) {
 							found = true;
-							// Should only be one, but we get a vector, lets iterate						
-							for (GattCharacteristic c : result.get().Characteristics()) {
-								wcout << "Found matching GattCharacteristic " << to_hstring(c.Uuid()).c_str() << endl
-									  << "Press enter to start subscribing to notifications, press enter again to stop:\n";
-								cin.getline(userInput, 2);
-
+							selectedCharacteristic = result.get().Characteristics().GetAt(0);
+							if(selectedCharacteristic!=nullptr){
+								wcout << "Found matching GattCharacteristic " << to_hstring(selectedCharacteristic.Uuid()).c_str() << endl;
 								//
-								// Check that characteristic is writable. Themn write to it to tell the dev that we want notifications								
+								// Check that characteristic is writable. Then write to it to tell the dev that we want notifications								
 								//
-								if (GattCharacteristicProperties::None != (c.CharacteristicProperties() & GattCharacteristicProperties::Notify)) {
-									event_token t = c.ValueChanged(stylusValueHandler);
-									c.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify);
-									cin.getline(userInput, 2);
+								if (GattCharacteristicProperties::None != (selectedCharacteristic.CharacteristicProperties() & GattCharacteristicProperties::Notify)) {
+									event_token t = selectedCharacteristic.ValueChanged(stylusValueHandler);
+									selectedCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify);									
 								}
 							}
-						}						
+						}
 					}		
 				}
-			}
-			bleDev.Close();
+			}			
 			if(!found)
 			{
 				wcout << "Device not Polhem Stylus compatible." << endl;
 				return 1;
 			}
+			wcout << "Starting server "<< url.c_str() <<endl;
+			server.Start(url);
+
+			wcout << "Enter to quit";
+			cin.getline(userInput, 2);
+			server.Shutdown();
+			wcout << "Closing BLE...";			
+			bleDev.Close();
+		
 		}
 		catch (...) {
 			wcout << "\nError or device connection lost.\n";
 		}
 	}
-	wcout << "Enter to quit";
-	cin.getline(userInput, 2);
-
-	pCli = NULL; // Indicate to any late threads that the HTTP client is now invalid.
+			
 	return 0;
 }
 
