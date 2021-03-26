@@ -21,10 +21,19 @@ constexpr guid stylusValueCharacteristic = { 0x90ad0001, 0x662b, 0x4504, { 0xb8,
 bool verbose = true;
 
 SocketServer server;
-
 fire_and_forget stylusValueHandler(GattCharacteristic c, GattValueChangedEventArgs const& v) {		
 	uint16_t data = *((uint16_t*) &v.CharacteristicValue().data()[0]);
 	server.Send(data);	
+	return winrt::fire_and_forget();
+}
+
+GattSessionStatus sessionStatus = GattSessionStatus::Active;
+fire_and_forget stylusSessionStatusChanged(GattSession s, GattSessionStatusChangedEventArgs const& a) {
+	sessionStatus = a.Status();
+	std::wcout << "stylusSessionStatusChanged "
+		<< "\ta.Status() " << ((a.Status()== GattSessionStatus::Active) ? "GattSessionStatus::Active" : "GattSessionStatus::Closed") << endl
+		<< "\ta.Error() " << ( a.Error() == BluetoothError::Success ? "BluetoothError::Success" : "BluetoothError") << endl;
+
 	return winrt::fire_and_forget();
 }
 
@@ -38,118 +47,145 @@ int main(int argc, char* argv[])
 		// first arg is dev id
 		try{
 			deviceAddress = stoll(argv[1], 0, 16);	// Convert adress string in hex format
-			wcout << "Connect to device with address 0x" << std::hex << deviceAddress << std::dec << endl;
+			std::wcout << "Device to use: 0x" << std::hex << deviceAddress << std::dec << endl;
 		}
 		catch (...) {
 			deviceAddress = 0;
+			wcout << "Could not interprete device address " << argv[1] << endl;
 		}
 
 		// second arg is URL
 		url = argv[2];
 
 	}
+	else if(argc==2){
+		deviceAddress = 0;
+		url = argv[1];
+	}
 
-	if (argc !=1 && deviceAddress == 0) {
-		wcout << "Usage\t" << argv[0] << "\t" << "\t\t\t" << "Interactive device selection and test connection" << endl
-			<< "\t" << argv[0] << " deviceId url" << "\t\t" << "Connect to device by deviceId (hex) and send to url" << endl << endl
-			<< "Example\t" << argv[0] << " 0xc56154495792 http://localhost:8080/set" << "\t\t" << endl;
+	if ((argc != 2 && argc != 3) ||(argc == 3 && deviceAddress == 0) ) {
+		wcout << "Usage\t" << argv[0] << "  url        " << "\t\t" << "Interactive device selection and send to url" << endl
+			<< "\t" << argv[0]        << " deviceId url" << "\t\t" << "Connect to device by deviceId (hex) and send to url" << endl << endl
+			<< "Example\t" << argv[0] << " 0xc56154495792 " << url.c_str() << "\t\t" << endl;
 		return 1;
 	}
 
-	char userInput[3];
-	userInput[0] = '\0';
 	hstring devId= L"";
 	if (deviceAddress == 0) {
 		// No adress given, prompt user
 		BLEdeviceFinder* pBleFinder = BLEdeviceFinder::getInstance();
 		devId = pBleFinder->PromptUserForDevice();		
 	}
-
+	
 	if (devId != L"" || deviceAddress != 0) {
-		try {
-			Windows::Devices::Bluetooth::BluetoothLEDevice bleDev = nullptr;
-			if (devId != L"") {
-				// Connect to the device by the Id
-				// Creating a BluetoothLEDevice object by calling this method alone doesn't (necessarily) initiate a connection.
-				bleDev = BluetoothLEDevice::FromIdAsync(devId).get();
-			}
-			else {
-				// Connect to the device by the adress
-				bleDev = BluetoothLEDevice::FromBluetoothAddressAsync(deviceAddress).get();
-			}
+		wcout << "Stylus data will be sent to: " << url.c_str() << endl
+			<< "Ctrl-c to quit." << endl;
+		server.Start(url);
+		bool quit = false;
+		while(!quit){
+			if (server.HasActiveClient()) {				
+				try {
+					Windows::Devices::Bluetooth::BluetoothLEDevice bleDev = nullptr;
+					if (devId != L"") {
+						// Connect to the device by the Id
+						// Creating a BluetoothLEDevice object by calling this method alone doesn't (necessarily) initiate a connection.
+						bleDev = BluetoothLEDevice::FromIdAsync(devId).get();
+					}
+					else {
+						// Connect to the device by the adress
+						bleDev = BluetoothLEDevice::FromBluetoothAddressAsync(deviceAddress).get();
+					}					
 
-			if (bleDev == nullptr) {
-				wcout << "Failed to connect to device " << devId.c_str() << ".\n";
-				return 1;
-			}
-
-			// Print some device info
-			wcout << endl
-				<< "Name: " << bleDev.Name().c_str() << endl
-				<< "Connection status:" << (bleDev.ConnectionStatus() == BluetoothConnectionStatus::Connected ? "Connected" : "Not Connected") << endl
-				<< "BluetoothAddress: 0x" << std::hex << bleDev.BluetoothAddress() << endl
-				<< "DeviceAccessInformation: " << (uint16_t)bleDev.DeviceAccessInformation().CurrentStatus() << endl;
-
-			//
-			// Search device for the service we want
-			//
-			bool found = false;
-			GattCharacteristic selectedCharacteristic = nullptr;
-			auto gattServices{ bleDev.GetGattServicesAsync(BluetoothCacheMode::Uncached).get() };						
-			for (GattDeviceService service : gattServices.Services()) {
-				GattCommunicationStatus gattCommunicationStatus = gattServices.Status();
-				if (gattCommunicationStatus == GattCommunicationStatus::Success) {
-					if (service.Uuid() == stylusService) {
-						auto result = service.GetCharacteristicsForUuidAsync(stylusValueCharacteristic);
+					if (bleDev != nullptr) {
+						event_token sessionStatusChangedToken;
+						event_token stylusHandlerToken;
+						GattCharacteristic selectedCharacteristic = nullptr;
 
 						//
-						// Let the com thread have some time to communicate
-						//
-						size_t i = 0;
-						while (!(result.Completed() || result.ErrorCode() || i < 100)) {
-							_sleep(100);
-						}
+						// Search device for the service we want
+						//						
+						bool found = false;
+						auto gattServices{ bleDev.GetGattServicesAsync(BluetoothCacheMode::Uncached).get() };
+						for (GattDeviceService service : gattServices.Services()) {
+							GattCommunicationStatus gattCommunicationStatus = gattServices.Status();							
+							if (gattCommunicationStatus == GattCommunicationStatus::Success) {
+								sessionStatus = GattSessionStatus::Active;
+								if (service.Uuid() == stylusService) {
+									auto result = service.GetCharacteristicsForUuidAsync(stylusValueCharacteristic);
+																		
+									// Register callback to keep track of session status
+									service.Session().SessionStatusChanged(stylusSessionStatusChanged);
 
-						if (result.ErrorCode()) {
-							wcout << "GetCharacteristicsForUuidAsync(stylusValueCharacteristic) got error code " << result.ErrorCode() << ".\n";
-						}
-						else if (result.get().Status() == GattCommunicationStatus::Success) {
-							found = true;
-							selectedCharacteristic = result.get().Characteristics().GetAt(0);
-							if(selectedCharacteristic!=nullptr){
-								wcout << "Found matching GattCharacteristic " << to_hstring(selectedCharacteristic.Uuid()).c_str() << endl;
-								//
-								// Check that characteristic is writable. Then write to it to tell the dev that we want notifications								
-								//
-								if (GattCharacteristicProperties::None != (selectedCharacteristic.CharacteristicProperties() & GattCharacteristicProperties::Notify)) {
-									event_token t = selectedCharacteristic.ValueChanged(stylusValueHandler);
-									selectedCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify);									
+									//
+									// Let the com thread have some time to communicate
+									//
+									size_t i = 0;
+									while (!(result.Completed() || result.ErrorCode() || ++i < 100)) {
+										_sleep(100);
+									}
+
+									if (result.ErrorCode()) {
+										wcout << "GetCharacteristicsForUuidAsync(stylusValueCharacteristic) got error code " << result.ErrorCode() << ".\n";
+									}
+									else if (result.get().Status() == GattCommunicationStatus::Success) {
+										found = true;
+										selectedCharacteristic = result.get().Characteristics().GetAt(0);
+										if (selectedCharacteristic != nullptr) {
+											if(verbose) wcout << "Found matching GattCharacteristic " << to_hstring(selectedCharacteristic.Uuid()).c_str() << endl;
+											//
+											// Check that characteristic is writable. Then write to it to tell the dev that we want notifications								
+											//
+											if (GattCharacteristicProperties::None != (selectedCharacteristic.CharacteristicProperties() & GattCharacteristicProperties::Notify)) {
+												stylusHandlerToken = selectedCharacteristic.ValueChanged(stylusValueHandler);	
+												selectedCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify);
+											}
+										}
+									}
 								}
 							}
+						}						
+						if (!found)
+						{
+							if(verbose)	wcout << "Device not Polhem Stylus compatible." << endl;
 						}
-					}		
-				}
-			}			
-			if(!found)
-			{
-				wcout << "Device not Polhem Stylus compatible." << endl;
-				return 1;
-			}
-			wcout << "Starting server "<< url.c_str() <<endl;
-			server.Start(url);
+						else {
+							wcout << "Connected to Stylus 0x" << std::hex << bleDev.BluetoothAddress() << endl;
+							while (gattServices.Status() == GattCommunicationStatus::Success && server.HasActiveClient() && sessionStatus == GattSessionStatus::Active);
+							// TODO: Check if user wants to quit
 
-			wcout << "Enter to quit";
-			cin.getline(userInput, 2);
-			server.Shutdown();
-			wcout << "Closing BLE...";			
-			bleDev.Close();
-		
-		}
-		catch (...) {
-			wcout << "\nError or device connection lost.\n";
+							// Cleanup event handlers
+							if (selectedCharacteristic != nullptr) {
+								selectedCharacteristic.ValueChanged(stylusHandlerToken);
+							}
+							//TODO sessionStatusChangedToken;
+							
+						}
+						if (!server.HasActiveClient()) {
+							wcout << "No client, disconnecting from Stylus." << endl;
+						}
+						else {
+							wcout << "Stylus communication interrupted." << endl;
+						}
+						bleDev.Close();
+					}
+				}
+				catch (...) {
+					wcout << "\nError or device connection lost.\n";
+				}				
+			}
+			/*
+			int c = std::cin.peek();
+			if (c != EOF) {
+				string str;
+				cin >> str;
+				if( str.find("q") != string::npos || str.find("Q") != string::npos) quit = true;
+			}
+			else {
+				_sleep(1000);	// Give it some slack before trying again
+			}*/			
+			_sleep(1000);	// Give it some slack before trying again
 		}
 	}
-			
 	return 0;
 }
 

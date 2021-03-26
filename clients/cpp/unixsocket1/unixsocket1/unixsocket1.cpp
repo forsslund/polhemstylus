@@ -28,10 +28,10 @@
 int main(int argc, char* argv[])
 {
     SocketClient<uint16_t> myClient;
-    myClient.Start("/dev/stylus-COM4");
+    myClient.Start("/dev/stylus1");
     
     uint16_t value = 0;
-    for(int i=0;i<100;i++){
+    for(int i=0;i<1000;i++){
         while (value == myClient.Get()) {
             Sleep(1);
         }

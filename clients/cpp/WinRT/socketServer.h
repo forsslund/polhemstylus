@@ -21,6 +21,7 @@ public:
 	bool Shutdown();
 	bool Send(uint16_t value);
 	bool Send(std::string str);
+	bool HasActiveClient();
 private:
 	void Listen();
 	bool isRunning = false;

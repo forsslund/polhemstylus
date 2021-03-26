@@ -95,13 +95,17 @@ using ssize_t = __int64;
 		return false;
 	}
 
-	void SocketServer::Listen() {
-		printf("\nIn listening thread\n");
+	bool SocketServer::HasActiveClient()
+	{	
+		const std::lock_guard<std::mutex> lock(activeConnections_mutex);
+		return activeConnections.size() > 0;
+	}
+
+	void SocketServer::Listen() {		
 		isRunning = true;
 		int rval = 0;
 		SOCKET messageSocket = INVALID_SOCKET;
-
-		printf("Starting socket server \n");
+		
 		listen(listenSocket, 5);
 		while(!stopServer)
 		{			
