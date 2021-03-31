@@ -18,6 +18,7 @@
 	int closesocket(SOCKET s){
 		return close(s);
 	}	
+	void WSACleanup(){};
 #endif
 
 bool SocketServer::Start(std::string socketPath) {
@@ -31,21 +32,16 @@ bool SocketServer::Start(std::string socketPath) {
 			printf("WSAStartup failed: %d\n", iResult);
 			return true;
 		}
-#endif
-		printf("1\n");
+#endif		
 		listenSocket = socket(AF_UNIX, SOCK_STREAM, 0);       /* Create server socket */
 		if (listenSocket == INVALID_SOCKET) {
-#ifdef _WIN64
-			WSACleanup();
-#endif			
+			WSACleanup();			
 			return true;
 		}
-printf("2\n");
 		// Make sure adress is ok
 		if ( remove( socketPath.c_str() ) == -1 && errno != ENOENT) {
 			return true;
 		}
-printf("3\n");
 		// Create address structure
 		struct sockaddr_un svaddr;
 		memset(&svaddr, 0, sizeof(struct sockaddr_un));
@@ -60,7 +56,6 @@ printf("3\n");
 		}
 		printf("Bound to %s", socketPath.c_str());
 		
-		// HERE
 		int rv;
 		rv = listen(listenSocket, 5);
 		if(rv!=0){
@@ -139,8 +134,8 @@ printf("3\n");
 			struct timeval timeout;			
 			timeout.tv_sec = 20;
 			timeout.tv_usec = 0;			
-			rv = select(1, &set, NULL, NULL, NULL);//&timeout);	// Any waiting connection? Timeout after 2 sec and recheck
-printf("gnuuuuuu");
+			//rv = select(1, &set, NULL, NULL, &timeout);	// Any waiting connection? Timeout after 2 sec and recheck
+			rv=1;
 			if (rv > 0) {
 				printf("accepting connection.\n");
 				// Waiting connection, accept it to a new socket and store
@@ -167,9 +162,7 @@ printf("gnuuuuuu");
 
 		shutdown(listenSocket, 0);		
 		
-		closesocket(listenSocket);
-		#ifdef _WIN64
-		WSACleanup();		
-		#endif
+		closesocket(listenSocket);		
+		WSACleanup();	
 		isRunning = false;
 	}

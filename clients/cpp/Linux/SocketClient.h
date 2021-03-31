@@ -22,6 +22,8 @@
 int closesocket(SOCKET s){
     return close(s);
 }
+
+
 void Sleep(int ms){
     usleep(ms * 1000);
 }
@@ -134,7 +136,7 @@ void SocketClient<T>::Listen() {
 					fd_set set;
 					FD_ZERO(&set);
 					FD_SET(listenSocket, &set);
-					int activity = select(1, &set, NULL, NULL, NULL);
+					//int activity = select(1, &set, NULL, NULL, NULL);
 
 					// Recive until the whole datapackage is filled
 					int byteCounter = 0;

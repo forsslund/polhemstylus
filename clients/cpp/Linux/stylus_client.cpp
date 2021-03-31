@@ -22,17 +22,15 @@
  */
 
 #include <assert.h>
-#include <glib.h>
-#include <signal.h>
+//#include <glib.h>
+//#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include <thread>
 
 #include "socketServer.h"
-
-#define SV_SOCK_PATH "/tmp/ud_ucase"
-
+#include <unistd.h>
 //-----------------------------------
 
 extern "C" {
@@ -67,7 +65,7 @@ int _kbhit(){
 #endif
 // -----------------------------------------------------------------------------
 
-static GMainLoop *m_main_loop;
+//static GMainLoop *m_main_loop;
 
 uint8_t bt_data[] = {0,0};
 uint8_t prev_bt_data[] = {0,0};
@@ -79,15 +77,17 @@ uuid_t service_uuid;
 
 SocketServer server;
 
+void Sleep(int ms){
+    usleep(ms * 1000);
+}
 
-void notification_handler(const uuid_t* uuid, const uint8_t* data, size_t data_length, void* user_data) {
-	static uint16_t gnu=0;
+void notification_handler(const uuid_t* uuid, const uint8_t* data, size_t data_length, void* user_data) {	
 	uint16_t stylusData;
 	if( data_length == sizeof(stylusData) ){
 		stylusData = *((uint16_t*) &data[0]);
-	}	
-	server.Send(gnu++);	
-	//server.Send(stylusData);	
+	}		
+	printf("send");
+	server.Send(stylusData);	
 }
 
 bool deActivateConnection(){
@@ -106,12 +106,14 @@ bool deActivateConnection(){
 void disconnected_handler(void *){
 		static int nrDisconnects=0;
 		nrDisconnects++;
-		g_log(NULL, G_LOG_LEVEL_DEBUG, "Disconnected %i",nrDisconnects);
+		//g_log(NULL, G_LOG_LEVEL_DEBUG, "Disconnected %i",nrDisconnects);
+		printf("nDisconnected!\n");
 		deActivateConnection();	
 }
 
 
 void activateConnection(){
+	printf("activateConnection()\n");
 		if(g_connection!=NULL){
 			printf("\nExisting connection, skipping.");
 			return;
@@ -135,40 +137,44 @@ void activateConnection(){
 		gattlib_register_on_disconnect(g_connection, disconnected_handler, NULL);
 }
 
+/*
 static void on_user_abort(int arg) {
 	g_main_loop_quit(m_main_loop);
-}
+}*/
 
 // If active client, sets up BLE connection, else discconnects to let BLE to save power
-gboolean monitorConnection(gpointer user_data){
+bool monitorConnection(){
+	static uint16_t gnu=0;
 	if( server.HasActiveClient() ){
-		printf("HasActiveClient\n");
+		printf("HasActiveClient %d\n",gnu);
 		if(g_connection==NULL)
 		{
 			activateConnection();			
-		}
+			server.Send(gnu++);
+		}		
 	}
 	else if(g_connection != NULL){		
 		disconnected_handler(NULL);
+		printf("disconnect");
 	}
+	
 	return true;	
 };
 
-void my_log_handler(const gchar *log_domain,
+/*void my_log_handler(const gchar *log_domain,
              GLogLevelFlags log_level,
              const gchar *message,
              gpointer user_data){
 				 puts(message);
 			 }
-
+*/
 
 int main(int argc, char *argv[]) {
 	int ret;
 	//std::string url = "/tmp/stylus-ttyACM0";
 	//std::string url = "/dev/stylus1";
 	std::string url = "kalle";
-	g_log_set_handler (NULL, GLogLevelFlags(G_LOG_LEVEL_DEBUG | G_LOG_LEVEL_WARNING | G_LOG_FLAG_FATAL
-                   			| G_LOG_FLAG_RECURSION), my_log_handler, NULL);
+
 
 	const char* adapter_name=NULL;		
 	char uuid_str[MAX_LEN_UUID_STR];	
@@ -195,20 +201,16 @@ int main(int argc, char *argv[]) {
 	}
 	
 	server.Start(url);
-	printf("Monitor connection?\n");
-	g_timeout_add(1, monitorConnection, NULL);
-		
-	// Catch CTRL-C
-	signal(SIGINT, on_user_abort);	
-
-	m_main_loop = g_main_loop_new(NULL, 0);
-	g_main_loop_run(m_main_loop);
+	printf("\nMonitor connection?\n");
+	
+	while(1){
+		monitorConnection();
+		Sleep(100);
+	}
 	
 	deActivateConnection();
 	server.Shutdown();
 
-
-	g_main_loop_unref(m_main_loop);
 	puts("Done");
 	return ret;
 }
