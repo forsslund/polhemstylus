@@ -38,11 +38,15 @@ endif()
 # Show all the warnings
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
 
-set(stylus_client_SRCS stylus_client.cpp)
+set(stylus_client_SRCS stylus_client.cpp SocketServer.cpp)
 set(scan_SRCS scan.c)
 
 add_executable(scan ${scan_SRCS})
 add_executable(stylus_client ${stylus_client_SRCS})
-add_executable(socket_client socket_client.c)
+add_executable(socket_client aClient.cpp)
+
+set_property(TARGET stylus_client PROPERTY CXX_STANDARD 17)	
+target_link_libraries(socket_client pthread)
+
 target_link_libraries(scan ${GATTLIB_LIBRARIES} ${GATTLIB_LDFLAGS} ${PCRE_LIBRARIES} pthread)
 target_link_libraries(stylus_client ${GATTLIB_LIBRARIES} ${GATTLIB_LDFLAGS} ${PCRE_LIBRARIES} pthread)
