@@ -68,9 +68,9 @@ void SocketClient<T>::Listen() {
 	struct sockaddr_un addr;
 	int dataSize = sizeof(data);
 	char* dataBuffer = new char[dataSize];
-
-	bool connectionLost = false;
+	
 	while (!stopClient) {
+		bool connectionLost = false;
 		// Try setting up a connection
 		SOCKET listenSocket = INVALID_SOCKET;
 		listenSocket = socket(AF_UNIX, SOCK_STREAM, 0);

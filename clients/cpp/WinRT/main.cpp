@@ -21,12 +21,15 @@ constexpr guid stylusValueCharacteristic = { 0x90ad0001, 0x662b, 0x4504, { 0xb8,
 bool verbose = true;
 
 SocketServer server;
+
+// BLE callback handler for recieving data
 fire_and_forget stylusValueHandler(GattCharacteristic c, GattValueChangedEventArgs const& v) {		
 	uint16_t data = *((uint16_t*) &v.CharacteristicValue().data()[0]);
 	server.Send(data);	
 	return winrt::fire_and_forget();
 }
 
+// BLE callback handler to keep track of session status (connected or not)
 GattSessionStatus sessionStatus = GattSessionStatus::Active;
 fire_and_forget stylusSessionStatusChanged(GattSession s, GattSessionStatusChangedEventArgs const& a) {
 	sessionStatus = a.Status();
@@ -41,6 +44,7 @@ fire_and_forget stylusSessionStatusChanged(GattSession s, GattSessionStatusChang
 int main(int argc, char* argv[])
 {
 	init_apartment();	
+
 	uint64_t deviceAddress = 0;
 	string url = "/dev/stylus1";
 	if (argc == 3) {
@@ -64,8 +68,8 @@ int main(int argc, char* argv[])
 	}
 
 	if ((argc != 2 && argc != 3) ||(argc == 3 && deviceAddress == 0) ) {
-		wcout << "Usage\t" << argv[0] << "  url        " << "\t\t" << "Interactive device selection and send to url" << endl
-			<< "\t" << argv[0]        << " deviceId url" << "\t\t" << "Connect to device by deviceId (hex) and send to url" << endl << endl
+		wcout << "Usage\t" << argv[0] << " path         " << "\t\t" << "Interactive device selection and send stylus data on socket path" << endl
+			<< "\t" << argv[0]        << " address path" << "\t\t" << "Connect to device by address (hex) and send stylus data on socket path" << endl << endl
 			<< "Example\t" << argv[0] << " 0xc56154495792 " << url.c_str() << "\t\t" << endl;
 		return 1;
 	}
@@ -150,8 +154,10 @@ int main(int argc, char* argv[])
 						}
 						else {
 							wcout << "Connected to Stylus 0x" << std::hex << bleDev.BluetoothAddress() << endl;
-							while (gattServices.Status() == GattCommunicationStatus::Success && server.HasActiveClient() && sessionStatus == GattSessionStatus::Active);
-							// TODO: Check if user wants to quit
+							while (gattServices.Status() == GattCommunicationStatus::Success && server.HasActiveClient() && sessionStatus == GattSessionStatus::Active) {
+								Sleep(100);
+							}
+							// TODO: Check if user wants to quit, but only when client disconnected
 
 							// Cleanup event handlers
 							if (selectedCharacteristic != nullptr) {
