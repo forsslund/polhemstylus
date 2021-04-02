@@ -95,7 +95,7 @@ static void ble_discovered_device(void *adapter, const char* addr, const char* n
 		printf("Discovered %s\n", addr);
 	}
 
-
+/*
 	connection = malloc(sizeof(struct connection_t));
 	if (connection == NULL) {
 		fprintf(stderr, "Failt to allocate connection.\n");
@@ -110,6 +110,7 @@ static void ble_discovered_device(void *adapter, const char* addr, const char* n
 		return;
 	}
 	LIST_INSERT_HEAD(&g_ble_connections, connection, entries);
+	*/
 }
 
 int main(int argc, const char *argv[]) {
