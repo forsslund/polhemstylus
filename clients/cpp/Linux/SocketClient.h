@@ -79,7 +79,7 @@ private:
 #ifdef _WIN32
     WSADATA wsaData{0};
 #endif
-	bool stopClient = false;	
+	volatile bool stopClient = false;	
 	bool connected = false;
 	T data = { 0 };
 	std::mutex dataMutex;	
@@ -90,6 +90,9 @@ private:
 
 
 ///////////////////// SocketClient.cpp ////////
+#ifdef _WIN64
+using ssize_t = __int64;
+#endif
 
 template <class T>
 void SocketClient<T>::Start(std::string socketPath_) {
@@ -101,10 +104,6 @@ void SocketClient<T>::Start(std::string socketPath_) {
 		
 }
 
-#ifdef _WIN64
-using ssize_t = __int64;
-#endif
-
 template <class T>
 void SocketClient<T>::Listen() {
 	printf("\nIn listening thread\n");
@@ -115,6 +114,7 @@ void SocketClient<T>::Listen() {
 	
 	while (!stopClient) {
 		// Try setting up a connection
+		printf( "Attempting to connect to %s\n", socketPath.c_str() );
 		listenSocket = socket(AF_UNIX, SOCK_STREAM, 0);
 		if (listenSocket != INVALID_SOCKET) {
 			connected = true;
@@ -125,46 +125,51 @@ void SocketClient<T>::Listen() {
 			int res = connect(listenSocket, (struct sockaddr*)&addr, sizeof(struct sockaddr_un));
             if (res==-1){
                 int errsv = errno;
-                printf("connect() failed with %d\n",errsv);
-				printf("%s\n", socketPath.c_str());
+                printf("%s\n", strerror(errsv));
             }
             if (res >= 0) {
-				printf("Connected to server \n");
+				printf("Connected to server.\n");
 				while (!stopClient && connected) {					
 					// Block untill activity on socket
 					fd_set set;
 					FD_ZERO(&set);
 					FD_SET(listenSocket, &set);
-					int activity = select(listenSocket+1, &set, NULL, NULL, NULL);					
-					// Recive until the whole datapackage is filled
-					int byteCounter = 0;
-					while (byteCounter < dataSize) {
-
-						// Note: blocking, timeout needed in order to reach connectionLost=true (is it necessary?)
-						// if another thread closes connection it returns with 0 immediately however. 
-						int res = recvfrom(listenSocket, &dataBuffer[byteCounter], dataSize - byteCounter, 0, NULL, NULL);
-						if (res <= 0) { // Since there was activity, we should have data, if no data or error code, connection was lost
-							connected = false;
-							break;
+					struct timeval timeout;			
+					timeout.tv_sec = 2;
+					timeout.tv_usec = 0;
+					int activity = select(listenSocket+1, &set, NULL, NULL, &timeout);		// Any activity on socket?
+					if(activity>0){	 // Not timeout, not error
+						// Recive until the whole datapackage is filled
+						int byteCounter = 0;
+						while (byteCounter < dataSize && !stopClient) {
+							int res = recvfrom(listenSocket, &dataBuffer[byteCounter], dataSize - byteCounter, 0, NULL, NULL);
+							if (res <= 0) { // Since there was activity, we should have data, if no data or error code, connection was lost
+								connected = false;
+								break;
+							}
+							else {
+								byteCounter += res;
+							}
 						}
-						else {
-							byteCounter += res;
+
+						if (byteCounter == dataSize) {
+							// Atomically store data
+							const std::lock_guard<std::mutex> lock(dataMutex);
+							memcpy((void*)&data, dataBuffer, sizeof(data));
 						}
 					}
-
-					if (byteCounter == dataSize) {
-						// Atomically store data
-						const std::lock_guard<std::mutex> lock(dataMutex);
-						memcpy((void*)&data, dataBuffer, sizeof(data));
+					else if(activity<0){
+						connected = false;
 					}
 				}
 			}
+			Sleep(10);
 			shutdown(listenSocket, 0);
 			closesocket(listenSocket);
 			listenSocket = INVALID_SOCKET;
-			connected = false;			
+			connected = false;
 		}
-		Sleep(100); // Wait before trying again
+		Sleep(250); // Wait before trying again
 	}
 #ifdef _WIN32
 	WSACleanup();

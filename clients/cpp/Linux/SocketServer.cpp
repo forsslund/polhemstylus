@@ -53,13 +53,12 @@ bool SocketServer::Start(std::string socketPath) {
 	if (::bind(listenSocket, (struct sockaddr*)&svaddr, sizeof(struct sockaddr_un)) == -1){
 		printf("Error binding to %s", socketPath.c_str());
 		return true;
-	}
-	printf("Bound to %s", socketPath.c_str());
+	}	
 	
 	int rv;
 	rv = listen(listenSocket, 5);
 	if(rv!=0){
-		printf("listen failed [%s]\n", strerror(errno));
+		printf("Listen failed [%s]\n", strerror(errno));
 	}
 	else{
 		// Now, fire up a thread to take care of incomming connections
@@ -72,8 +71,9 @@ bool SocketServer::Start(std::string socketPath) {
 
 bool SocketServer::Shutdown() {
 	stopServer = true;
-	if (listenThread.joinable()) listenThread.join();
-	
+	if (listenThread.joinable()) {
+		listenThread.join();	
+	}
 	return false;
 }
 
@@ -84,7 +84,7 @@ bool SocketServer::Send(uint16_t value) {
 		int result = send(*i, (char*)&value, sizeof(value), 0);
 		if (result < 0) {
 			// Inactive or broken connection, close and remove
-			printf("Client disconnected\n");
+			printf("Client disconnected.\n");
 			closesocket(*i);
 			i = activeConnections.erase(i);
 		}
@@ -97,7 +97,6 @@ bool SocketServer::Send(uint16_t value) {
 
 bool SocketServer::Send(std::string str)
 {
-	printf("Sending");
 	const std::lock_guard<std::mutex> lock(activeConnections_mutex);
 	auto i = activeConnections.begin();
 	while (i != activeConnections.end()) {
@@ -120,15 +119,13 @@ bool SocketServer::HasActiveClient()
 	return activeConnections.size() > 0;
 }
 
-void SocketServer::Listen() {	
-	printf("In listening thread. \n");	
+void SocketServer::Listen() {		
 	isRunning = true;
 	int rval = 0;
 	SOCKET messageSocket = INVALID_SOCKET;
 	int rv;
 	while(!stopServer)
-	{	
-		printf("Listening\n");		
+	{				
 		//
 		// Check if there is a connection waiting
 		//
@@ -145,7 +142,7 @@ void SocketServer::Listen() {
 			if (messageSocket != INVALID_SOCKET) {
 				const std::lock_guard<std::mutex> lock(activeConnections_mutex);
 				activeConnections.push_back(messageSocket);	// Store the socket
-				printf("Client connected!\n");
+				printf("Client connected.\n");
 			}
 		}			
 		else if(rv<0){
@@ -161,9 +158,8 @@ void SocketServer::Listen() {
 	}
 	activeConnections.clear();
 
-	shutdown(listenSocket, 0);		
-	
-	closesocket(listenSocket);		
+	shutdown(listenSocket, 0);
+	closesocket(listenSocket);
 	WSACleanup();	
 	isRunning = false;
 }
