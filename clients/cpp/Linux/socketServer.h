@@ -31,8 +31,7 @@ public:
 
 	}
 	~SocketServer() {
-		stopServer = true;
-		if (listenThread.joinable()) listenThread.join();
+		Shutdown();
 	}
 
 	bool Start(std::string socketPath);

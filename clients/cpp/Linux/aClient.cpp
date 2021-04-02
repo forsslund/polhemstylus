@@ -17,5 +17,6 @@ int main(int argc, char* argv[])
         int rotation = (0x03 & pValue[0]) * 256 + pValue[1];
         printf("%x rotation=%d\n", value, rotation);
     }
+    myClient.Shutdown();
     return 0;
 }

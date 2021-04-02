@@ -121,7 +121,7 @@ int main(int argc, const char *argv[]) {
 	} else if (argc == 2) {
 		adapter_name = argv[1];
 	} else {
-		fprintf(stderr, "%s [<bluetooth-adapter>]\n", argv[0]);
+		fprintf(stderr, "%s [hci<bluetooth-adapter-number>]\n", argv[0]);
 		return 1;
 	}
 

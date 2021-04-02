@@ -130,14 +130,12 @@ void SocketClient<T>::Listen() {
             }
             if (res >= 0) {
 				printf("Connected to server \n");
-				while (!stopClient && connected) {
-					printf("waiting for data\n");
+				while (!stopClient && connected) {					
 					// Block untill activity on socket
 					fd_set set;
 					FD_ZERO(&set);
 					FD_SET(listenSocket, &set);
-					//int activity = select(1, &set, NULL, NULL, NULL);
-
+					int activity = select(listenSocket+1, &set, NULL, NULL, NULL);					
 					// Recive until the whole datapackage is filled
 					int byteCounter = 0;
 					while (byteCounter < dataSize) {
@@ -157,7 +155,7 @@ void SocketClient<T>::Listen() {
 					if (byteCounter == dataSize) {
 						// Atomically store data
 						const std::lock_guard<std::mutex> lock(dataMutex);
-						memcpy((void*)&data, dataBuffer, sizeof(data));						
+						memcpy((void*)&data, dataBuffer, sizeof(data));
 					}
 				}
 			}

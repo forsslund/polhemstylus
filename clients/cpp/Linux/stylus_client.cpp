@@ -22,7 +22,7 @@
  */
 
 #include <assert.h>
-//#include <glib.h>
+#include <glib.h>	// Gattlib internal messaging requires glibmain to run
 //#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,40 +37,9 @@ extern "C" {
 #include "gattlib.h"
 }
 
-// ----- Portable keyboard loop break ------------------------------------------
-#ifdef WINDOWS
-#include <conio.h>
-#else
-#include <stdio.h>
-#include <sys/select.h>
-#include <sys/ioctl.h>
-#include <termios.h>
-//#include <stropts.h>
-int _kbhit(){
-    static const int STDIN = 0;
-    static int initialized = 0;
-    if (!initialized){
-        // Use termios to turn off line buffering
-        struct termios term;
-        tcgetattr(STDIN, &term);
-        term.c_lflag &= ~ICANON;
-        tcsetattr(STDIN, TCSANOW, &term);
-        setbuf(stdin, NULL);
-        initialized = 1;
-    }
-    int bytesWaiting;
-    ioctl(STDIN, FIONREAD, &bytesWaiting);
-    return bytesWaiting;
-}
-#endif
-// -----------------------------------------------------------------------------
-
-//static GMainLoop *m_main_loop;
-
-uint8_t bt_data[] = {0,0};
-uint8_t prev_bt_data[] = {0,0};
-
+static GMainLoop *m_main_loop;
 gatt_connection_t* g_connection;
+
 void* adapter=NULL;
 const char* device_address=NULL;
 uuid_t service_uuid;
@@ -85,14 +54,16 @@ void notification_handler(const uuid_t* uuid, const uint8_t* data, size_t data_l
 	uint16_t stylusData;
 	if( data_length == sizeof(stylusData) ){
 		stylusData = *((uint16_t*) &data[0]);
-	}		
-	printf("send");
-	server.Send(stylusData);	
+		server.Send( stylusData );	
+		//printf("sending %d",stylusData);
+	}
+	printf("Gotti %d bytes, d[0]=%d d[1]=%d\n", int(data_length), data[0], data[1]);	
+	//printf("got %d bytes", uint16_t( data_length ));
 }
 
 bool deActivateConnection(){
 		if(g_connection==NULL){
-			printf("\nNo existing connection");
+			printf("\nNo existing connection\n");
 			return false;
 		}
 
@@ -107,7 +78,7 @@ void disconnected_handler(void *){
 		static int nrDisconnects=0;
 		nrDisconnects++;
 		//g_log(NULL, G_LOG_LEVEL_DEBUG, "Disconnected %i",nrDisconnects);
-		printf("nDisconnected!\n");
+	//	printf("Disconnected from Stylus.\n");
 		deActivateConnection();	
 }
 
@@ -124,50 +95,56 @@ void activateConnection(){
 			fprintf(stderr, "Fail to connect to the bluetooth device.\n");
 			return;
 		}
+		
+		gattlib_register_on_disconnect(g_connection, disconnected_handler, NULL);
 
 		gattlib_register_notification(g_connection, notification_handler, NULL);
+
 		//gattlib_uuid_to_string(&service_uuid, uuid_str, sizeof(uuid_str));		
 		int ret = gattlib_notification_start(g_connection, &service_uuid);
 		if (ret) {
-			fprintf(stderr, "Fail to start notification.\n");
-			gattlib_disconnect(g_connection);			
-			puts("Done");
+			fprintf(stderr, "Fail gattlib_notification_start.\n");
+			gattlib_disconnect(g_connection);						
 			return;
 		}
-		gattlib_register_on_disconnect(g_connection, disconnected_handler, NULL);
+
+		printf("Done\n");
 }
 
-/*
+bool doQuit=false;
 static void on_user_abort(int arg) {
+	printf("on_user_abort\n");
+	doQuit = true;
+	deActivateConnection();
+	printf("deactivated BLE\n");
+	server.Shutdown();
+	printf("socket server shut down\n");
 	g_main_loop_quit(m_main_loop);
-}*/
+}
 
 // If active client, sets up BLE connection, else discconnects to let BLE to save power
-bool monitorConnection(){
-	static uint16_t gnu=0;
-	if( server.HasActiveClient() ){
-		printf("HasActiveClient %d\n",gnu);
-		if(g_connection==NULL)
-		{
-			activateConnection();			
-			server.Send(gnu++);
-		}		
-	}
-	else if(g_connection != NULL){		
-		disconnected_handler(NULL);
-		printf("disconnect");
-	}
+gboolean monitorConnection(gpointer user_data){
+		if( server.HasActiveClient() && !doQuit ){		
+			if(g_connection==NULL)
+			{
+				activateConnection();
+			}			
+		}
+		else if(g_connection != NULL){		
+			disconnected_handler(NULL);
+			printf("disconnect");
+		}
 	
 	return true;	
 };
 
-/*void my_log_handler(const gchar *log_domain,
+void my_log_handler(const gchar *log_domain,
              GLogLevelFlags log_level,
              const gchar *message,
              gpointer user_data){
 				 puts(message);
 			 }
-*/
+
 
 int main(int argc, char *argv[]) {
 	int ret;
@@ -188,7 +165,7 @@ int main(int argc, char *argv[]) {
 		device_address = argv[2];		
 	} else  {
 		printf("%s <device_address>\n", argv[0]);
-		printf("%s <adapter_name> <device_address>\n", argv[0]);
+		printf("%s hci<adapter_nr> <device_address>\n", argv[0]);
 		return 1;		
 	}
 
@@ -203,14 +180,20 @@ int main(int argc, char *argv[]) {
 	server.Start(url);
 	printf("\nMonitor connection?\n");
 	
-	while(1){
-		monitorConnection();
-		Sleep(100);
-	}
 	
-	deActivateConnection();
-	server.Shutdown();
+	//
+	// Set up glib stuf
+	//
+	g_log_set_handler (NULL, GLogLevelFlags(G_LOG_LEVEL_DEBUG | G_LOG_LEVEL_WARNING | G_LOG_FLAG_FATAL
+                   			| G_LOG_FLAG_RECURSION), my_log_handler, NULL);
+	// Catch CTRL-C
+	signal(SIGINT, on_user_abort);
 
-	puts("Done");
+	g_timeout_add(1, monitorConnection, NULL);	// This is our task!
+	m_main_loop = g_main_loop_new(NULL, 0);
+	g_main_loop_run(m_main_loop);
+
+	on_user_abort(0);	// Cleanupcode in here, make sure it is allways run
+	
 	return ret;
 }

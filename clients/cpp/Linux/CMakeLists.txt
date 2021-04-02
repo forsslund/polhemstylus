@@ -38,15 +38,22 @@ endif()
 # Show all the warnings
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
 
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
 set(stylus_client_SRCS stylus_client.cpp SocketServer.cpp)
 set(scan_SRCS scan.c)
 
 add_executable(scan ${scan_SRCS})
 add_executable(stylus_client ${stylus_client_SRCS})
+add_executable(stylus_clientOld stylus_clientOld.cpp)
 add_executable(socket_client aClient.cpp)
+add_executable(socket_clientOld socket_clientOld.c)
 
 set_property(TARGET stylus_client PROPERTY CXX_STANDARD 17)	
 target_link_libraries(socket_client pthread)
 
 target_link_libraries(scan ${GATTLIB_LIBRARIES} ${GATTLIB_LDFLAGS} ${PCRE_LIBRARIES} pthread)
 target_link_libraries(stylus_client ${GATTLIB_LIBRARIES} ${GATTLIB_LDFLAGS} ${PCRE_LIBRARIES} pthread)
+target_link_libraries(stylus_clientOld ${GATTLIB_LIBRARIES} ${GATTLIB_LDFLAGS} ${PCRE_LIBRARIES} pthread)
