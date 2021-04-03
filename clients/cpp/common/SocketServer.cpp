@@ -11,7 +11,7 @@
 
 #define BUF_SIZE 10 
 #include <mutex>
-#include "socketServer.h"
+#include "SocketServer.h"
 #include "string.h"
 
 #ifndef _WIN64
