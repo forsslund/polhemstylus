@@ -3,7 +3,7 @@
 #include <unistd.h>	// usleep
 #include <glib.h>	// Gattlib internal messaging requires glibmain to run
 
-#include "socketServer.h"
+#include "SocketServer.h"
 
 extern "C" {
 #include "gattlib.h"

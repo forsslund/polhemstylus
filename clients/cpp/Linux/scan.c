@@ -25,6 +25,7 @@ struct connection_t {
 	LIST_ENTRY(connection_t) entries;
 };
 
+/*
 static void *ble_connect_device(void *arg) {
 	struct connection_t *connection = arg;
 	char* addr = connection->addr;
@@ -84,10 +85,10 @@ connection_exit:
 	pthread_mutex_unlock(&g_mutex);
 	return NULL;
 }
+*/
 
 static void ble_discovered_device(void *adapter, const char* addr, const char* name, void *user_data) {
-	struct connection_t *connection;
-	int ret;
+
 
 	if (name) {
 		printf("Discovered %s - '%s'\n", addr, name);
@@ -96,6 +97,8 @@ static void ble_discovered_device(void *adapter, const char* addr, const char* n
 	}
 
 /*
+	struct connection_t *connection;
+	int ret;
 	connection = malloc(sizeof(struct connection_t));
 	if (connection == NULL) {
 		fprintf(stderr, "Failt to allocate connection.\n");

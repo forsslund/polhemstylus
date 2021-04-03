@@ -11,7 +11,7 @@ pkg_search_module(PCRE REQUIRED libpcre)
 pkg_search_module(GATTLIB REQUIRED gattlib)
 pkg_search_module(GLIB REQUIRED glib-2.0)
 
-include_directories(${GLIB_INCLUDE_DIRS}) 
+include_directories(${GLIB_INCLUDE_DIRS} ../common) 
 
 # Define 'Debug' as the default build type
 if (NOT CMAKE_BUILD_TYPE)
@@ -26,7 +26,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 add_executable(scan scan.c)
-add_executable(stylusProxy stylusProxy.cpp SocketServer.cpp)
+add_executable(stylusProxy stylusProxy.cpp ../common/SocketServer.cpp)
 add_executable(aClient aClient.cpp)
 
 set_property(TARGET stylusProxy PROPERTY CXX_STANDARD 17)	
