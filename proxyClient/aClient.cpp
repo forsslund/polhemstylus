@@ -1,5 +1,7 @@
-#include <sys/un.h>
-#include <unistd.h>
+#ifndef WIN32
+    #include <sys/un.h>
+    #include <unistd.h>
+#endif
 #include "SocketClient.h"
 
 int main(int argc, char* argv[])
