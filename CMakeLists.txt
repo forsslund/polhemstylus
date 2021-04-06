@@ -1,6 +1,6 @@
 ﻿# CMakeList.txt : CMake project for Polhem Stylus integration
 #
-cmake_minimum_required (VERSION 3.19)
+cmake_minimum_required (VERSION 3.16)
 
 # Note that it must be before the first project of your top-level CMakeLists.txt, since it needs to be set globally at generation time 
 set( CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION_MAXIMUM true)	# Unfortunatly, does not stop build when version is not found
