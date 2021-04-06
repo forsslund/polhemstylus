@@ -23,7 +23,7 @@ bool verbose = true;
 SocketServer server;
 
 // BLE callback handler for recieving data
-fire_and_forget stylusValueHandler(GattCharacteristic c, GattValueChangedEventArgs const& v) {		
+fire_and_forget stylusValueNotificationHandler(GattCharacteristic c, GattValueChangedEventArgs const& v) {		
 	uint16_t data = *((uint16_t*) &v.CharacteristicValue().data()[0]);
 	server.Send(data);	
 	return winrt::fire_and_forget();
@@ -74,14 +74,15 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	hstring devId= L"";
 	if (deviceAddress == 0) {
 		// No adress given, prompt user
+		hstring devId = L"";
 		BLEdeviceFinder* pBleFinder = BLEdeviceFinder::getInstance();
-		devId = pBleFinder->PromptUserForDevice();		
+		devId = pBleFinder->PromptUserForDevice();
+		deviceAddress = BluetoothLEDevice::FromIdAsync(devId).get().BluetoothAddress();
 	}
 	
-	if (devId != L"" || deviceAddress != 0) {
+	if (deviceAddress != 0) {
 		wcout << "Stylus data will be sent to: " << url.c_str() << endl
 			<< "Ctrl-c to quit." << endl;
 		server.Start(url);
@@ -90,15 +91,7 @@ int main(int argc, char* argv[])
 			if (server.HasActiveClient()) {				
 				try {
 					Windows::Devices::Bluetooth::BluetoothLEDevice bleDev = nullptr;
-					if (devId != L"") {
-						// Connect to the device by the Id
-						// Creating a BluetoothLEDevice object by calling this method alone doesn't (necessarily) initiate a connection.
-						bleDev = BluetoothLEDevice::FromIdAsync(devId).get();
-					}
-					else {
-						// Connect to the device by the adress
-						bleDev = BluetoothLEDevice::FromBluetoothAddressAsync(deviceAddress).get();
-					}					
+					bleDev = BluetoothLEDevice::FromBluetoothAddressAsync(deviceAddress).get();				
 
 					if (bleDev != nullptr) {
 						event_token sessionStatusChangedToken;
@@ -106,7 +99,7 @@ int main(int argc, char* argv[])
 						GattCharacteristic selectedCharacteristic = nullptr;
 
 						//
-						// Search device for the service we want
+						// Search device for the service we want, and register callbacks to handle notification and connection status
 						//						
 						bool found = false;
 						auto gattServices{ bleDev.GetGattServicesAsync(BluetoothCacheMode::Uncached).get() };
@@ -125,7 +118,7 @@ int main(int argc, char* argv[])
 									//
 									size_t i = 0;
 									while (!(result.Completed() || result.ErrorCode() || ++i < 100)) {
-										_sleep(100);
+										Sleep(100);
 									}
 
 									if (result.ErrorCode()) {
@@ -140,7 +133,7 @@ int main(int argc, char* argv[])
 											// Check that characteristic is writable. Then write to it to tell the dev that we want notifications								
 											//
 											if (GattCharacteristicProperties::None != (selectedCharacteristic.CharacteristicProperties() & GattCharacteristicProperties::Notify)) {
-												stylusHandlerToken = selectedCharacteristic.ValueChanged(stylusValueHandler);	
+												stylusHandlerToken = selectedCharacteristic.ValueChanged(stylusValueNotificationHandler);	
 												selectedCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify);
 											}
 										}
@@ -178,20 +171,11 @@ int main(int argc, char* argv[])
 				catch (...) {
 					wcout << "\nError or device connection lost.\n";
 				}				
-			}
-			/*
-			int c = std::cin.peek();
-			if (c != EOF) {
-				string str;
-				cin >> str;
-				if( str.find("q") != string::npos || str.find("Q") != string::npos) quit = true;
-			}
-			else {
-				_sleep(1000);	// Give it some slack before trying again
-			}*/			
-			_sleep(1000);	// Give it some slack before trying again
+			}		
+			Sleep(250);	// Give it some slack before trying again
 		}
 	}
+	server.Shutdown();
 	return 0;
 }
 
