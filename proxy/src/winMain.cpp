@@ -42,13 +42,16 @@ fire_and_forget stylusSessionStatusChanged(GattSession s, GattSessionStatusChang
 
 
 int main(int argc, char* argv[])
-{
-	init_apartment();	
+{	
 
 	uint64_t deviceAddress = 0;
-	std::string url = "/dev/stylus1";
-	std::string programName = argv[0];
-	programName = programName.substr(programName.find_last_of('\\'));	
+	std::string url = "/dev/stylus1";	
+	std::string programName = argv[0];	
+	// Clean up program name
+	if (programName.find_last_of('\\') != std::string::npos) {
+		programName = programName.substr(programName.find_last_of('\\'));
+	}
+		
 	if (argc == 3) {
 		// first arg is dev id
 		try{
@@ -75,15 +78,18 @@ int main(int argc, char* argv[])
 			<< "Example\t" << programName << " 0xc56154495792 " << url << "\t" << endl;
 		return 1;
 	}
-
-	hstring devId= L"";
+	init_apartment();
 	if (deviceAddress == 0) {
 		// No adress given, prompt user
+		hstring devId = L"";
 		BLEdeviceFinder* pBleFinder = BLEdeviceFinder::getInstance();
-		devId = pBleFinder->PromptUserForDevice();		
+		devId = pBleFinder->PromptUserForDevice();
+		if (devId != L"") {
+			deviceAddress = BluetoothLEDevice::FromIdAsync(devId).get().BluetoothAddress();
+		}		
 	}
 	
-	if (devId != L"" || deviceAddress != 0) {
+	if ( deviceAddress != 0) {
 		wcout << "Stylus data will be sent to: " << url.c_str() << endl
 			<< "Ctrl-c to quit." << endl;
 		server.Start(url);
@@ -92,15 +98,9 @@ int main(int argc, char* argv[])
 			if (server.HasActiveClient()) {				
 				try {
 					Windows::Devices::Bluetooth::BluetoothLEDevice bleDev = nullptr;
-					if (devId != L"") {
-						// Connect to the device by the Id
-						// Creating a BluetoothLEDevice object by calling this method alone doesn't (necessarily) initiate a connection.
-						bleDev = BluetoothLEDevice::FromIdAsync(devId).get();
-					}
-					else {
-						// Connect to the device by the adress
-						bleDev = BluetoothLEDevice::FromBluetoothAddressAsync(deviceAddress).get();
-					}					
+	
+					// Connect to the device by the adress
+					bleDev = BluetoothLEDevice::FromBluetoothAddressAsync(deviceAddress).get();			
 
 					if (bleDev != nullptr) {
 						event_token sessionStatusChangedToken;
@@ -108,7 +108,7 @@ int main(int argc, char* argv[])
 						GattCharacteristic selectedCharacteristic = nullptr;
 
 						//
-						// Search device for the service we want
+						// Search device for the service we want, and register callbacks to handle notification and connection status
 						//						
 						bool found = false;
 						auto gattServices{ bleDev.GetGattServicesAsync(BluetoothCacheMode::Uncached).get() };
@@ -127,7 +127,7 @@ int main(int argc, char* argv[])
 									//
 									size_t i = 0;
 									while (!(result.Completed() || result.ErrorCode() || ++i < 100)) {
-										_sleep(100);
+										Sleep(100);										
 									}
 
 									if (result.ErrorCode()) {
@@ -193,9 +193,9 @@ int main(int argc, char* argv[])
 				if( str.find("q") != string::npos || str.find("Q") != string::npos) quit = true;
 			}
 			else {
-				_sleep(1000);	// Give it some slack before trying again
+				Sleep(1000);	// Give it some slack before trying again
 			}*/			
-			_sleep(1000);	// Give it some slack before trying again
+			Sleep(1000);	// Give it some slack before trying again
 		}
 	}
 	return 0;
