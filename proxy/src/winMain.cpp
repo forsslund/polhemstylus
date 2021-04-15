@@ -117,7 +117,7 @@ int main(int argc, char* argv[])
 							if (gattCommunicationStatus == GattCommunicationStatus::Success) {
 								sessionStatus = GattSessionStatus::Active;
 								if (service.Uuid() == stylusService) {
-									auto result = service.GetCharacteristicsForUuidAsync(stylusValueCharacteristic);
+									IAsyncOperation<GattCharacteristicsResult> result = service.GetCharacteristicsForUuidAsync(stylusValueCharacteristic);
 																		
 									// Register callback to keep track of session status
 									service.Session().SessionStatusChanged(stylusSessionStatusChanged);
@@ -133,17 +133,20 @@ int main(int argc, char* argv[])
 									if (result.ErrorCode()) {
 										wcout << "GetCharacteristicsForUuidAsync(stylusValueCharacteristic) got error code " << result.ErrorCode() << ".\n";
 									}
-									else if (result.get().Status() == GattCommunicationStatus::Success) {
-										found = true;
-										selectedCharacteristic = result.get().Characteristics().GetAt(0);
-										if (selectedCharacteristic != nullptr) {
-											if(verbose) wcout << "Found matching GattCharacteristic " << to_hstring(selectedCharacteristic.Uuid()).c_str() << endl;
-											//
-											// Check that characteristic is writable. Then write to it to tell the dev that we want notifications								
-											//
-											if (GattCharacteristicProperties::None != (selectedCharacteristic.CharacteristicProperties() & GattCharacteristicProperties::Notify)) {
-												stylusHandlerToken = selectedCharacteristic.ValueChanged(stylusValueHandler);	
-												selectedCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify);
+									else {
+										GattCharacteristicsResult characteristicsResults = result.get();
+										if (characteristicsResults.Status() == GattCommunicationStatus::Success) {
+											found = true;
+											selectedCharacteristic = characteristicsResults.Characteristics().GetAt(0);
+											if (selectedCharacteristic != nullptr) {
+												if (verbose) wcout << "Found matching GattCharacteristic " << to_hstring(selectedCharacteristic.Uuid()).c_str() << endl;
+												//
+												// Check that characteristic is writable. Then write to it to tell the dev that we want notifications								
+												//
+												if (GattCharacteristicProperties::None != (selectedCharacteristic.CharacteristicProperties() & GattCharacteristicProperties::Notify)) {
+													stylusHandlerToken = selectedCharacteristic.ValueChanged(stylusValueHandler);
+													selectedCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify);
+												}
 											}
 										}
 									}
