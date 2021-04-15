@@ -119,7 +119,7 @@ int main(int argc, char* argv[])
 							if (gattCommunicationStatus == GattCommunicationStatus::Success) {
 								sessionStatus = GattSessionStatus::Active;
 								if (service.Uuid() == stylusService) {
-									auto result = service.GetCharacteristicsForUuidAsync(stylusValueCharacteristic);
+									IAsyncOperation<GattCharacteristicsResult> result = service.GetCharacteristicsForUuidAsync(stylusValueCharacteristic);
 																		
 									// Register callback to keep track of session status
 									service.Session().SessionStatusChanged(stylusSessionStatusChanged);
