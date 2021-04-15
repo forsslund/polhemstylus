@@ -1,3 +1,0 @@
-When installing gattlib from source, you might have to run
-	sudo ldconfig -v
-in order to make library accessable.

@@ -43,13 +43,12 @@ fire_and_forget stylusSessionStatusChanged(GattSession s, GattSessionStatusChang
 
 int main(int argc, char* argv[])
 {	
-
 	uint64_t deviceAddress = 0;
-	std::string url = "/dev/stylus1";	
+	std::string url = "/dev/stylus1";
 	std::string programName = argv[0];	
 	// Clean up program name
-	if (programName.find_last_of('\\') != std::string::npos) {
-		programName = programName.substr(programName.find_last_of('\\'));
+	if (programName.find_last_of("/\\") != std::string::npos) {
+		programName = programName.substr(1+ programName.find_last_of("/\\"));
 	}
 		
 	if (argc == 3) {
@@ -73,11 +72,14 @@ int main(int argc, char* argv[])
 	}
 
 	if ((argc != 2 && argc != 3) ||(argc == 3 && deviceAddress == 0) ) {
-		cout << "Usage:\n\t" << programName << " path         " << "\t" << "Interactive device selection and send stylus data on socket path" << endl			  
-			<< "\t" << programName << " address path" << "\t" << "Connect to device by address (hex) and send stylus data on socket path" << endl << endl
-			<< "Example\t" << programName << " 0xc56154495792 " << url << "\t" << endl;
+		cout << "Usage:\n" 
+			<< "\t" << programName << " path        " << "\t" << "Interactive device selection and send stylus data on socket path" << endl			  
+			<< "\t" << programName << " address path" << "\t" << "Connect to device by address (hex) and send stylus data on socket path" << endl
+			<< endl
+			<< "Example:\t" << programName << " 0xC56154495792 " << url << endl;
 		return 1;
 	}
+
 	init_apartment();
 	if (deviceAddress == 0) {
 		// No adress given, prompt user
@@ -133,17 +135,21 @@ int main(int argc, char* argv[])
 									if (result.ErrorCode()) {
 										wcout << "GetCharacteristicsForUuidAsync(stylusValueCharacteristic) got error code " << result.ErrorCode() << ".\n";
 									}
-									else if (result.get().Status() == GattCommunicationStatus::Success) {
-										found = true;
-										selectedCharacteristic = result.get().Characteristics().GetAt(0);
-										if (selectedCharacteristic != nullptr) {
-											if(verbose) wcout << "Found matching GattCharacteristic " << to_hstring(selectedCharacteristic.Uuid()).c_str() << endl;
-											//
-											// Check that characteristic is writable. Then write to it to tell the dev that we want notifications								
-											//
-											if (GattCharacteristicProperties::None != (selectedCharacteristic.CharacteristicProperties() & GattCharacteristicProperties::Notify)) {
-												stylusHandlerToken = selectedCharacteristic.ValueChanged(stylusValueHandler);	
-												selectedCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify);
+									else
+									{
+										GattCharacteristicsResult characteristicResult = result.get();
+										if (characteristicResult.Status() == GattCommunicationStatus::Success) {
+											found = true;
+											selectedCharacteristic = characteristicResult.Characteristics().GetAt(0);
+											if (selectedCharacteristic != nullptr) {
+												if (verbose) wcout << "Found matching GattCharacteristic " << to_hstring(selectedCharacteristic.Uuid()).c_str() << endl;
+												//
+												// Check that characteristic is writable. Then write to it to tell the devcie that we want notifications								
+												//
+												if (GattCharacteristicProperties::None != (selectedCharacteristic.CharacteristicProperties() & GattCharacteristicProperties::Notify)) {
+													stylusHandlerToken = selectedCharacteristic.ValueChanged(stylusValueHandler);
+													selectedCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify);
+												}
 											}
 										}
 									}

@@ -1,4 +1,4 @@
-#ifdef _WIN64
+#ifdef _WIN32
 	#include "pch.h"
 	#include <winsock2.h>
 	#include <WS2tcpip.h>
@@ -14,7 +14,7 @@
 #include "SocketServer.h"
 #include "string.h"
 
-#ifndef _WIN64
+#ifndef _WIN32
 	int closesocket(SOCKET s){
 		return close(s);
 	}	
@@ -25,7 +25,7 @@ bool SocketServer::Start(std::string socketPath) {
 	if (isRunning) return true;
 	int iResult;
 
-#ifdef _WIN64
+#ifdef _WIN32
 	// Initialize Winsock
 	iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
 	if (iResult != 0) {

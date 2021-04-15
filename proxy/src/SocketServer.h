@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-#ifdef _WIN64
+#ifdef _WIN32
 	#include <winsock2.h>
 	#include < afunix.h >
 	using ssize_t = __int64;
@@ -42,7 +42,7 @@ public:
 private:
 	void Listen();
 	bool isRunning = false;
-	#ifdef _WIN64
+	#ifdef _WIN32
 	WSADATA wsaData{0};
 	#endif
 	bool stopServer = false;
