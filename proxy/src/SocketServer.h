@@ -41,6 +41,7 @@ public:
 	bool HasActiveClient();
 private:
 	void Listen();
+	void DetectDisconnectedClients();
 	bool isRunning = false;
 	#ifdef _WIN32
 	WSADATA wsaData{0};

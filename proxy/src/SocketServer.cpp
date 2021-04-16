@@ -119,6 +119,44 @@ bool SocketServer::HasActiveClient()
 	return activeConnections.size() > 0;
 }
 
+void SocketServer::DetectDisconnectedClients() {
+	char dummyBuffer[1];
+	const std::lock_guard<std::mutex> lock(activeConnections_mutex);
+	auto i = activeConnections.begin();
+	while (i != activeConnections.end()) {
+		fd_set set;
+		FD_ZERO(&set); // clear the set
+		FD_SET(*i, &set);
+		struct timeval timeout;
+		timeout.tv_sec = 0;
+		timeout.tv_usec = 1;
+		int result = select(*i + 1, &set, NULL, NULL, &timeout);	// Just check for activity, should always timeout
+		bool disconnected = false;
+		if (result < 0) {
+			// Error
+			disconnected = true;
+		}		
+		else if(result>0){
+			// Ehm data!? Well is it alive?
+			int res = recvfrom(*i, dummyBuffer, 1, 0, NULL, NULL);			
+			if (res < 0) {
+				disconnected = true;
+			}
+		}
+
+		if (disconnected) {
+			// Inactive or broken connection, close and remove
+			disconnected = true;
+			printf("Client disconnected.\n");
+			closesocket(*i);
+			i = activeConnections.erase(i);
+		}
+		else {
+			i++;	// Alive, go to next
+		}
+	}
+}
+
 void SocketServer::Listen() {		
 	isRunning = true;
 	int rval = 0;
@@ -147,7 +185,8 @@ void SocketServer::Listen() {
 		}			
 		else if(rv<0){
 			printf("Error, rv=%d  errno=%d", rv,  errno);
-		}			
+		}
+		DetectDisconnectedClients();
 	}
 
 	// close all connections
@@ -163,3 +202,4 @@ void SocketServer::Listen() {
 	WSACleanup();	
 	isRunning = false;
 }
+
