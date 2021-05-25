@@ -1,7 +1,9 @@
 ﻿# CMakeList.txt : CMake project for Polhem Stylus Proxy
 # 
-cmake_minimum_required (VERSION 3.16)
+cmake_minimum_required (VERSION 3.1)
 project ("polhemStylusProxy")
+
+#set(CMAKE_BUILD_TYPE Debug)
 
 message("CMakeList in " ${CMAKE_CURRENT_SOURCE_DIR} )
 IF (WIN32)    
