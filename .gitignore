@@ -2,3 +2,10 @@ CMakeFiles/
 *.cmake
 CMakeCache.txt
 Makefile
+.vs/*
+out/*
+proxy/Release/*
+proxy/stylusProxy.dir
+x64/
+*.vcxproj*
+*.sln
