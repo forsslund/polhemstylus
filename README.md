@@ -1,9 +1,18 @@
 # polhemstylus
 
-NOTE 2020 EDITON: it is stylus_service.js That is running on POLHEM!
+2021-05-25
+
+Note Windows: If you get "not a polhem device" error it can be that Windows has paired the device. 
+Go to "Bluetooth settings" and if you see Polhem there, click "Remove device".
+
+
+
+
+
+NOTE 2021 EDITON: it is stylus_service.js That is running on POLHEM!
 
 simple.js is a simulator just counting up and sending
-polhem_stylus.js is the real deal running on polhem
+polhem_stylus.js is the old version running on polhem
 
 Clients (init the connection and,) read the bluetooth data
 
