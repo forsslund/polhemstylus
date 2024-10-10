@@ -7,6 +7,8 @@
 #else
 	#include <sys/un.h>
 	#include <unistd.h>
+	#include <stdio.h>
+	#include <string>
 #endif
 
 #define BUF_SIZE 10 

@@ -15,6 +15,9 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <iostream>
+#include <string>
+#include <stdio.h>
 
 #include <errno.h>
 

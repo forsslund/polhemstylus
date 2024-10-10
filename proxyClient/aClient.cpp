@@ -3,6 +3,9 @@
     #include <unistd.h>
 #endif
 #include "SocketClient.h"
+#include <string>
+#include <iostream>
+#include <stdio.h>
 
 int main(int argc, char* argv[])
 {
